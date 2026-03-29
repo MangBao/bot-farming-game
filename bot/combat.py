@@ -14,7 +14,7 @@ import logging
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
 import config
-from utils import random_delay
+from utils import random_delay, random_sleep, send_telegram_alert
 from scanner import _parse_hp_from_page
 
 log = logging.getLogger(__name__)
@@ -104,44 +104,69 @@ def _select_and_throw_ball(page: Page, rank: str) -> str:
 
     if tag == "select":
         options = dropdown.locator("option").all()
+        
+        # ── Parse inventory and filter available options ──────────────────────
+        count_re = re.compile(r"\(x(\d+)\)")
+        available_options = [] # list of (name, value, count, pct)
+        
         for opt in options:
             text = opt.inner_text()
-            m    = pct_re.search(text)
-            if m:
-                pct = float(m.group(1))
-                log.info("[ball]   Option: '%-30s' → %.1f%%", text.strip(), pct)
+            val = opt.get_attribute("value") or text.strip()
+            
+            p_match = pct_re.search(text)
+            c_match = count_re.search(text)
+            
+            pct = float(p_match.group(1)) if p_match else 0.0
+            count = int(c_match.group(1)) if c_match else 0
+            name = normalize_ball_name(text)
+            
+            log.info("[ball]   Option: '%-30s' → %.1f%% | Count: %d", text.strip(), pct, count)
+            if count > 0:
+                available_options.append((name, val, count, pct))
                 if pct > best_pct:
-                    best_pct   = pct
-                    best_value = opt.get_attribute("value") or text.strip()
-                    best_name  = normalize_ball_name(text)
+                    best_pct = pct
+                    best_value = val
+                    best_name = name
 
-        # Find target ball based on rank
+        # ── Selection Logic ──────────────────────────────────────────────────
+        chosen_ball_val = ""
+        chosen_ball_name = ""
+        
+        # Try target balls in order of preference
         for t_ball in target_balls:
-            for opt in options:
-                text = opt.inner_text()
-                if t_ball.lower() in text.lower():
-                    target_value = opt.get_attribute("value") or text.strip()
-                    target_name  = normalize_ball_name(text)
-                    log.info("[ball] Found target ball '%s' for rank %s", t_ball, rank)
+            for opt_name, opt_val, opt_count, opt_pct in available_options:
+                if t_ball.lower() in opt_name.lower():
+                    chosen_ball_val = opt_val
+                    chosen_ball_name = opt_name
+                    log.info("[ball] Selected target ball: %s (x%d)", opt_name, opt_count)
                     break
-            if target_value:
+            if chosen_ball_val:
                 break
-
-        if target_value:
-            log.info("[ball] Selecting targeted ball.")
-            dropdown.select_option(value=target_value)
-            chosen_ball = target_name
-        elif best_value:
-            log.info("[ball] Target ball not found. Fallback to best ball (%.1f%%).", best_pct)
-            dropdown.select_option(value=best_value)
-            chosen_ball = best_name
+                
+        # ── Emergency Check for VIPs ──────────────────────────────────────────
+        if rank in config.ALWAYS_CATCH_RANKS:
+            # Check if we have high-tier balls (Master or Ultra)
+            has_high_tier = any("master" in opt[0].lower() or "ultra" in opt[0].lower() for opt in available_options)
+            
+            if not has_high_tier:
+                log.warning("[ball] 🚨 VIP ENCOUNTER & NO HIGH-TIER BALLS!")
+                send_telegram_alert(f"🚨 KHẨN CẤP: Gặp {rank} VIP nhưng đã hết sạch bóng xịn (Master/Ultra)! Hãy vào game cứu ngay!")
+                log.info("[ball] Tạm dừng 45 giây chờ cứu viện...")
+                random_sleep(30, 60)
+                # After waiting, we refresh options or just use what we have? 
+                # To be safe, let's just proceed with best available if user didn't act
+        
+        if not chosen_ball_val and best_value:
+            log.info("[ball] Preferred balls out of stock. Using best available: %s", best_name)
+            chosen_ball_val = best_value
+            chosen_ball_name = best_name
+            
+        if chosen_ball_val:
+            dropdown.select_option(value=chosen_ball_val)
+            chosen_ball = chosen_ball_name
         else:
-            log.warning("[ball] No parseable %% found – using last option.")
-            if options:
-                chosen_ball = normalize_ball_name(options[-1].inner_text())
-                options[-1].click()
-            else:
-                return ""
+            log.warning("[ball] No balls left in inventory!")
+            return ""
     else:
         # Custom dropdown: click to open, then pick highest-%/target
         dropdown.click()
@@ -277,6 +302,10 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
     player_max = pokemon_data.get("player_max", 0)
     is_new     = pokemon_data.get("is_new_pokedex", False)
 
+    config.BOT_STATE["stats"]["encounters"] += 1
+    if player_max > 0:
+        config.BOT_STATE["player_hp"] = f"{player_hp}/{player_max}"
+
     log.info("[encounter] ─── %s | Rank: %s | HP: %d/%d ───", name, rank, current_hp, max_hp)
 
     # ── Self-Defense Check (entry) ────────────────────────────────────────────
@@ -334,6 +363,14 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
                     current_hp, predicted_max_hit
                 )
                 break
+
+            # ── SAFETY STOP: Check if player fainted ─────────────────────────
+            attack_btn = page.get_by_role("button", name=re.compile("Chiến đấu|Tấn công|Attack", re.I))
+            if not attack_btn.is_visible(timeout=3_000) or not attack_btn.is_enabled():
+                 log.warning("[encounter] 🚨 BÁO ĐỘNG: Nút chiến đấu biến mất/vô hiệu hóa! Pokemon phe mình đã kiệt sức.")
+                 send_telegram_alert(f"🚨 BÁO ĐỘNG: Pokemon của bạn đã kiệt sức (Hết HP) khi đang đánh {name}! Bot tạm dừng chiến đấu.")
+                 _flee(page)
+                 return ""
 
             # ── Attack ───────────────────────────────────────────────────────
             log.info("[encounter] Attacking...")
@@ -398,6 +435,7 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
         outcome = _check_capture_result(page)
 
         if outcome == "success":
+            config.BOT_STATE["stats"]["caught"] += 1
             log.info("[encounter] ✅ Đã bắt được %s!", name)
             return thrown
 

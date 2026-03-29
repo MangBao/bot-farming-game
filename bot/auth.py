@@ -9,10 +9,51 @@ import logging
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
 import config
-from utils import random_delay
+from utils import random_delay, random_sleep
 
 log = logging.getLogger(__name__)
 
+
+def auto_login(page: Page) -> bool:
+    """Tự động đăng nhập nếu đang ở màn hình login."""
+    try:
+        # Check if login form is visible
+        email_input = page.locator("input[type='email'], input[name='email'], input[type='password']").first
+        if not email_input.is_visible(timeout=3_000):
+            return True
+            
+        log.info("[auto_login] Phát hiện bị văng ra trang đăng nhập, đang tiến hành đăng nhập lại...")
+        
+        email_field = page.locator("input[type='email'], input[name='email']").first
+        if email_field.is_visible():
+            email_field.fill(config.EMAIL)
+            
+        password_input = page.locator("input[type='password']").first
+        if password_input.is_visible():
+            password_input.fill(config.PASSWORD)
+            
+        login_btn = page.get_by_role("button", name="Đăng Nhập")
+        if not login_btn.is_visible():
+            login_btn = page.locator("button[type='submit'], input[type='submit']").first
+        
+        login_btn.click()
+        page.wait_for_load_state("networkidle", timeout=15000)
+        
+        if email_field.is_visible(timeout=3000):
+            log.error("[auto_login] Vẫn còn ở trang đăng nhập. Thất bại.")
+            return False
+            
+        log.info(f"[auto_login] Đăng nhập thành công, chuyển lẹ đến {config.MAP_URL}")
+        page.goto(config.MAP_URL, wait_until="domcontentloaded")
+        page.wait_for_load_state("networkidle")
+        
+        return True
+    except PlaywrightTimeoutError:
+        log.error("[auto_login] Lỗi Timeout khi auto-login.")
+        return False
+    except Exception as e:
+        log.error(f"[auto_login] Lỗi khi auto-login: {e}")
+        return False
 
 def login_and_navigate(page: Page) -> None:
     """
