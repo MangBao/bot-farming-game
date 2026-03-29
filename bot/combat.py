@@ -54,13 +54,13 @@ def _attack(page: Page) -> None:
         log.error("[attack] Attack button not found within timeout.")
 
 
-def _select_and_throw_ball(page: Page, rank: str) -> bool:
+def _select_and_throw_ball(page: Page, rank: str) -> str:
     """
     Open Pokéball dropdown, pick the best ball based on rank, click 'Dùng bóng'.
 
     Returns:
-        True  – the throw action was performed successfully.
-        False – could not find the dropdown or confirm button.
+        String name of the ball used (e.g. "PokeBall", "MasterBall") 
+        or empty string if action failed.
     """
     log.info("[ball] Opening Pokéball selector...")
     random_delay()
@@ -74,7 +74,7 @@ def _select_and_throw_ball(page: Page, rank: str) -> bool:
         dropdown.wait_for(state="visible", timeout=10_000)
     except PlaywrightTimeoutError:
         log.error("[ball] Pokéball dropdown not found.")
-        return False
+        return ""
 
     # ── Target Ball mapping ──────────────────────────────────────────────────
     target_balls = []
@@ -89,7 +89,16 @@ def _select_and_throw_ball(page: Page, rank: str) -> bool:
     pct_re       = re.compile(r"(\d+(?:\.\d+)?)\s*%")
     best_value   = ""
     best_pct     = -1.0
+    best_name    = "PokeBall"
     target_value = ""
+    target_name  = ""
+
+    def normalize_ball_name(raw: str) -> str:
+        r = raw.lower()
+        if "master" in r: return "MasterBall"
+        if "ultra" in r:  return "Ultra Ball"
+        if "great" in r:  return "Great Ball"
+        return "PokeBall"
 
     tag = dropdown.evaluate("el => el.tagName.toLowerCase()")
 
@@ -104,6 +113,7 @@ def _select_and_throw_ball(page: Page, rank: str) -> bool:
                 if pct > best_pct:
                     best_pct   = pct
                     best_value = opt.get_attribute("value") or text.strip()
+                    best_name  = normalize_ball_name(text)
 
         # Find target ball based on rank
         for t_ball in target_balls:
@@ -111,6 +121,7 @@ def _select_and_throw_ball(page: Page, rank: str) -> bool:
                 text = opt.inner_text()
                 if t_ball.lower() in text.lower():
                     target_value = opt.get_attribute("value") or text.strip()
+                    target_name  = normalize_ball_name(text)
                     log.info("[ball] Found target ball '%s' for rank %s", t_ball, rank)
                     break
             if target_value:
@@ -119,15 +130,18 @@ def _select_and_throw_ball(page: Page, rank: str) -> bool:
         if target_value:
             log.info("[ball] Selecting targeted ball.")
             dropdown.select_option(value=target_value)
+            chosen_ball = target_name
         elif best_value:
             log.info("[ball] Target ball not found. Fallback to best ball (%.1f%%).", best_pct)
             dropdown.select_option(value=best_value)
+            chosen_ball = best_name
         else:
             log.warning("[ball] No parseable %% found – using last option.")
             if options:
+                chosen_ball = normalize_ball_name(options[-1].inner_text())
                 options[-1].click()
             else:
-                return False
+                return ""
     else:
         # Custom dropdown: click to open, then pick highest-%/target
         dropdown.click()
@@ -145,17 +159,22 @@ def _select_and_throw_ball(page: Page, rank: str) -> bool:
                 if pct > best_pct:
                     best_pct  = pct
                     best_item = item
+                    best_name = normalize_ball_name(text)
 
         for t_ball in target_balls:
             for item in items:
-                if t_ball.lower() in item.inner_text().lower():
+                text = item.inner_text()
+                if t_ball.lower() in text.lower():
                     target_item = item
+                    target_name = normalize_ball_name(text)
                     log.info("[ball] Found target ball '%s'", t_ball)
                     break
             if target_item:
                 break
 
         final_item = target_item or best_item
+        chosen_ball = target_name if target_item else best_name
+
         if final_item is not None:
             if final_item == best_item and not target_item:
                 log.info("[ball] Target ball not found, clicking best option (%.1f%%).", best_pct)
@@ -165,7 +184,7 @@ def _select_and_throw_ball(page: Page, rank: str) -> bool:
             final_item.click()
         else:
             log.warning("[ball] No option with parseable %% found – aborting throw.")
-            return False
+            return ""
 
     # ── Confirm throw ────────────────────────────────────────────────────────
     random_delay()
@@ -174,10 +193,10 @@ def _select_and_throw_ball(page: Page, rank: str) -> bool:
         confirm_btn = page.get_by_role("button", name="Dùng bóng")
         confirm_btn.wait_for(state="visible", timeout=10_000)
         confirm_btn.click()
-        return True
+        return chosen_ball
     except PlaywrightTimeoutError:
         log.error("[ball] 'Dùng bóng' button not found.")
-        return False
+        return ""
 
 
 def _check_capture_result(page: Page) -> str:
@@ -232,7 +251,7 @@ def _check_capture_result(page: Page) -> str:
 # Public encounter handler
 # ===========================================================================
 
-def handle_encounter(page: Page, pokemon_data: dict) -> bool:
+def handle_encounter(page: Page, pokemon_data: dict) -> str:
     """
     Decide whether to flee or fight, then manage the capture loop.
 
@@ -247,8 +266,8 @@ def handle_encounter(page: Page, pokemon_data: dict) -> bool:
                        player_hp, player_max, is_new_pokedex}.
 
     Returns:
-        True  – Pokémon was caught.
-        False – Pokémon fled, or all attempts were exhausted.
+        String of the ball used (e.g. "PokeBall") if caught.
+        Empty string "" if Pokémon fled or all attempts were exhausted.
     """
     name       = pokemon_data.get("name", "Unknown")
     rank       = pokemon_data.get("rank", "Unknown")
@@ -267,7 +286,7 @@ def handle_encounter(page: Page, pokemon_data: dict) -> bool:
             (player_hp / player_max) * 100
         )
         _flee(page)
-        return False
+        return ""
 
     # ── Smart Rank Gate ───────────────────────────────────────────────────────
     if rank not in config.ALWAYS_CATCH_RANKS:
@@ -276,7 +295,7 @@ def handle_encounter(page: Page, pokemon_data: dict) -> bool:
         else:
             log.info("[encounter] Rank '%s' đã có trong Pokedex → Bỏ chạy để tiết kiệm bóng.", rank)
             _flee(page)
-            return False
+            return ""
     else:
         log.info("[encounter] 🎯 Hàng VIP Rank '%s' – Tiến hành bắt.", rank)
 
@@ -335,7 +354,7 @@ def handle_encounter(page: Page, pokemon_data: dict) -> bool:
             new_hp, new_max, new_p_hp, new_p_max = _parse_hp_from_page(page)
             if new_hp == 0 and new_max == 0:
                 log.warning("[encounter] HP unreadable – Pokémon may have fainted.")
-                return False
+                return ""
 
             # Self-defense check mid-combat
             if new_p_max > 0 and (new_p_hp / new_p_max) < 0.15:
@@ -344,7 +363,7 @@ def handle_encounter(page: Page, pokemon_data: dict) -> bool:
                     (new_p_hp / new_p_max) * 100
                 )
                 _flee(page)
-                return False
+                return ""
 
             # Compute damage_dealt from HP diff if log parse failed
             if damage_dealt is None:
@@ -374,17 +393,17 @@ def handle_encounter(page: Page, pokemon_data: dict) -> bool:
         thrown = _select_and_throw_ball(page, rank)
         if not thrown:
             log.error("[encounter] Throw failed (could not interact with UI) – aborting.")
-            return False
+            return ""
 
         outcome = _check_capture_result(page)
 
         if outcome == "success":
             log.info("[encounter] ✅ Đã bắt được %s!", name)
-            return True
+            return thrown
 
         if outcome == "fled":
             log.warning("[encounter] 💨 Pokemon đã chạy mất!")
-            return False
+            return ""
 
         # State C: miss, still in battle
         log.info("[encounter] ❌ Bắt trượt lần %d, thử lại...", attempt + 1)
@@ -392,4 +411,4 @@ def handle_encounter(page: Page, pokemon_data: dict) -> bool:
 
     # Loop exhausted
     log.warning("[encounter] 🚫 Hết lượt ném, trở về map.")
-    return False
+    return ""

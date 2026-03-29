@@ -141,6 +141,17 @@ def scan_pokemon(page: Page) -> Optional[dict]:
     log.info("[scan] Pokémon name: '%s'", name)
     log.info("[scan] Rank: %s", rank)
 
+    # ── Extract image URL (for Telegram notification) ────────────────────────
+    image_url = ""
+    try:
+        img_loc = page.locator("img.animate-bounce").first
+        if not img_loc.is_visible(timeout=1000):
+            img_loc = page.locator("div.absolute.inset-0 img").first
+        if img_loc.is_visible():
+            image_url = img_loc.get_attribute("src") or ""
+    except Exception:
+        pass
+
     # ── Extract HP ────────────────────────────────────────────────────────────
     enemy_cur, enemy_max, player_cur, player_max = _parse_hp_from_page(page)
     if enemy_max:
@@ -155,5 +166,6 @@ def scan_pokemon(page: Page) -> Optional[dict]:
         "max_hp": enemy_max,
         "player_hp": player_cur,
         "player_max": player_max,
-        "is_new_pokedex": is_new_pokedex
+        "is_new_pokedex": is_new_pokedex,
+        "image_url": image_url
     }

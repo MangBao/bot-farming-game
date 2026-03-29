@@ -68,16 +68,22 @@ def run_bot(page: Page) -> None:
                     pokemon["current_hp"], pokemon["max_hp"],
                 )
                 random_delay()
-                caught = handle_encounter(page, pokemon)
-                if caught:
+                caught_ball = handle_encounter(page, pokemon)
+                if caught_ball:
                     log.info("[bot] 🏆 Caught %s! Resuming scan.", pokemon["name"])
                     
                     if pokemon["rank"] in config.HIGH_VALUE_RANKS:
                         hp_str = f"{pokemon['current_hp']}/{pokemon['max_hp']}"
-                        send_telegram_notification(pokemon["name"], pokemon["rank"], hp_str)
+                        send_telegram_notification(
+                            pokemon["name"], 
+                            pokemon["rank"], 
+                            hp_str, 
+                            used_ball=caught_ball, 
+                            image_url=pokemon.get("image_url")
+                        )
                         log.info("[bot] 📱 Đã gửi thông báo Telegram cho %s!", pokemon["name"])
                 else:
-                    log.info("[bot] 🔄 Encounter ended (fled/miss). Back to scan.")
+                    log.info("[bot] 🔄 Encounter ended (fled/miss/skipped). Back to scan.")
             else:
                 log.info("[bot] No Pokémon this round – waiting before retry.")
                 random_delay(config.RETRY_DELAY_MIN, config.RETRY_DELAY_MAX)
