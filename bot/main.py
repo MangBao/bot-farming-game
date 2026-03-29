@@ -21,7 +21,14 @@ import logging
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
 
 import config
-from utils import random_delay, random_sleep, send_telegram_notification, send_telegram_alert, start_telegram_listener
+from utils import (
+    random_delay, 
+    random_sleep, 
+    send_telegram_notification, 
+    send_telegram_alert, 
+    start_telegram_listener,
+    is_special_variant
+)
 from auth import login_and_navigate, auto_login
 from scanner import scan_pokemon
 from combat import handle_encounter
@@ -106,16 +113,23 @@ def run_bot(page: Page) -> None:
                     log.info("[bot] 🏆 Caught %s! Resuming scan.", pokemon["name"])
                     
                     is_new = pokemon.get("is_new_pokedex", False)
-                    # Notify IF it's a high-value rank OR it's a new Pokedex entry
-                    if pokemon["rank"] in config.HIGH_VALUE_RANKS or is_new:
+                    is_special = is_special_variant(pokemon["name"])
+                    
+                    # Notify IF it's high-value, new, or a special variant
+                    if pokemon["rank"] in config.HIGH_VALUE_RANKS or is_new or is_special:
                         hp_str = f"{pokemon['current_hp']}/{pokemon['max_hp']}"
+                        
+                        if is_special:
+                            log.info(f"[bot] 🌈 PHÁT HIỆN BIẾN THỂ ĐẶC BIỆT: {pokemon['name']}!")
+                            
                         send_telegram_notification(
                             pokemon_name=pokemon["name"], 
                             rank=pokemon["rank"], 
                             hp=hp_str, 
                             used_ball=caught_ball, 
                             image_url=pokemon.get("image_url"),
-                            is_new_pokedex=is_new
+                            is_new_pokedex=is_new,
+                            is_special_variant=is_special
                         )
                         log.info("[bot] 📱 Đã gửi thông báo Telegram cho %s!", pokemon["name"])
                 else:

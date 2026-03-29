@@ -53,176 +53,95 @@ def _attack(page: Page) -> None:
     except PlaywrightTimeoutError:
         log.error("[attack] Attack button not found within timeout.")
 
-
 def _select_and_throw_ball(page: Page, rank: str) -> str:
     """
-    Open Pokéball dropdown, pick the best ball based on rank, click 'Dùng bóng'.
+    Open Pokéball dropdown, parse stock counts, and pick the best ball 
+    based on the ALLOWED_BALLS priority matrix for the given rank.
 
     Returns:
-        String name of the ball used (e.g. "PokeBall", "MasterBall") 
-        or empty string if action failed.
+    - Ball name (str) if a ball was successfully thrown.
+    - None if no valid ball is available or UI fails.
     """
-    log.info("[ball] Opening Pokéball selector...")
+    log.info("[ball] ─── Selecting Pokéball for Rank %s ───", rank)
     random_delay()
 
-    # ── Locate dropdown ──────────────────────────────────────────────────────
+    # 1. Resource Priority Matrix
+    ALLOWED_BALLS = {
+        "UR+": ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
+        "UR": ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
+        "SSR": ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
+        "SS":  ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
+        "S":   ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
+        "A":   ["Ultra Ball", "Great Ball", "PokeBall"],
+        "B":   ["PokeBall", "Great Ball"],  # Prioritize PokeBall for cost-saving
+        "C":   ["PokeBall", "Great Ball"],
+        "D":   ["PokeBall", "Great Ball"],
+    }
+    allowed_for_this_rank = ALLOWED_BALLS.get(rank, ["PokeBall"])
+
+    # 2. Locate and open Dropdown
     try:
         dropdown = page.locator("select").filter(has_text="Chọn bóng để bắt").first
         if not dropdown.is_visible(timeout=2_000):
             dropdown = page.locator("select").first
-
-        dropdown.wait_for(state="visible", timeout=10_000)
+        dropdown.wait_for(state="visible", timeout=5_000)
     except PlaywrightTimeoutError:
         log.error("[ball] Pokéball dropdown not found.")
-        return ""
+        return None
 
-    # ── Target Ball mapping ──────────────────────────────────────────────────
-    target_balls = []
-    if rank in ["GOD", "GR", "MR", "LR", "UR+", "UR", "SSR", "SSS+", "SSS", "SS"]:
-        target_balls = ["Master", "Ultra"]
-    elif rank in ["SR", "R", "S", "A"]:
-        target_balls = ["Ultra", "Great"]
-    else:
-        target_balls = ["PokeBall", "Great"]
-
-    # ── Parse options ────────────────────────────────────────────────────────
-    pct_re       = re.compile(r"(\d+(?:\.\d+)?)\s*%")
-    best_value   = ""
-    best_pct     = -1.0
-    best_name    = "PokeBall"
-    target_value = ""
-    target_name  = ""
-
-    def normalize_ball_name(raw: str) -> str:
-        r = raw.lower()
-        if "master" in r: return "MasterBall"
-        if "ultra" in r:  return "Ultra Ball"
-        if "great" in r:  return "Great Ball"
-        return "PokeBall"
-
-    tag = dropdown.evaluate("el => el.tagName.toLowerCase()")
-
-    if tag == "select":
-        options = dropdown.locator("option").all()
+    # 3. Parse and read inventory counts using regex
+    # Common format: "Great Ball (x12) - ~25%"
+    available_options = {} # { "Ball Name": { "count": int, "value": str } }
+    
+    options = dropdown.locator("option").all()
+    for opt in options:
+        text = opt.inner_text().strip()
+        val = opt.get_attribute("value")
         
-        # ── Parse inventory and filter available options ──────────────────────
-        count_re = re.compile(r"\(x(\d+)\)")
-        available_options = [] # list of (name, value, count, pct)
-        
-        for opt in options:
-            text = opt.inner_text()
-            val = opt.get_attribute("value") or text.strip()
+        # Regex to extract ball name and count
+        match = re.search(r"^(.*?)\s*\(x(\d+)\)", text)
+        if match:
+            raw_name = match.group(1).strip()
+            count = int(match.group(2))
             
-            p_match = pct_re.search(text)
-            c_match = count_re.search(text)
+            # Normalize name
+            normalized = "PokeBall"
+            low_name = raw_name.lower()
+            if "master" in low_name: normalized = "MasterBall"
+            elif "ultra" in low_name: normalized = "Ultra Ball"
+            elif "great" in low_name: normalized = "Great Ball"
             
-            pct = float(p_match.group(1)) if p_match else 0.0
-            count = int(c_match.group(1)) if c_match else 0
-            name = normalize_ball_name(text)
-            
-            log.info("[ball]   Option: '%-30s' → %.1f%% | Count: %d", text.strip(), pct, count)
-            if count > 0:
-                available_options.append((name, val, count, pct))
-                if pct > best_pct:
-                    best_pct = pct
-                    best_value = val
-                    best_name = name
+            available_options[normalized] = {"count": count, "value": val, "original_text": text}
+            log.debug("[ball] Found in stock: %s (x%d)", normalized, count)
 
-        # ── Selection Logic ──────────────────────────────────────────────────
-        chosen_ball_val = ""
-        chosen_ball_name = ""
-        
-        # Try target balls in order of preference
-        for t_ball in target_balls:
-            for opt_name, opt_val, opt_count, opt_pct in available_options:
-                if t_ball.lower() in opt_name.lower():
-                    chosen_ball_val = opt_val
-                    chosen_ball_name = opt_name
-                    log.info("[ball] Selected target ball: %s (x%d)", opt_name, opt_count)
-                    break
-            if chosen_ball_val:
-                break
-                
-        # ── Emergency Check for VIPs ──────────────────────────────────────────
-        if rank in config.ALWAYS_CATCH_RANKS:
-            # Check if we have high-tier balls (Master or Ultra)
-            has_high_tier = any("master" in opt[0].lower() or "ultra" in opt[0].lower() for opt in available_options)
-            
-            if not has_high_tier:
-                log.warning("[ball] 🚨 VIP ENCOUNTER & NO HIGH-TIER BALLS!")
-                send_telegram_alert(f"🚨 KHẨN CẤP: Gặp {rank} VIP nhưng đã hết sạch bóng xịn (Master/Ultra)! Hãy vào game cứu ngay!")
-                log.info("[ball] Tạm dừng 45 giây chờ cứu viện...")
-                random_sleep(30, 60)
-                # After waiting, we refresh options or just use what we have? 
-                # To be safe, let's just proceed with best available if user didn't act
-        
-        if not chosen_ball_val and best_value:
-            log.info("[ball] Preferred balls out of stock. Using best available: %s", best_name)
-            chosen_ball_val = best_value
-            chosen_ball_name = best_name
-            
-        if chosen_ball_val:
-            dropdown.select_option(value=chosen_ball_val)
-            chosen_ball = chosen_ball_name
-        else:
-            log.warning("[ball] No balls left in inventory!")
-            return ""
-    else:
-        # Custom dropdown: click to open, then pick highest-%/target
-        dropdown.click()
-        page.wait_for_timeout(500)
-        items       = page.locator("[class*=ball-option], [class*=pokeball-item], [role='option']").all()
-        best_item   = None
-        target_item = None
+    # 4. Find first valid ball based on priority order
+    selected_value = None
+    selected_name = None
+    
+    for preferred in allowed_for_this_rank:
+        info = available_options.get(preferred)
+        if info and info["count"] > 0:
+            selected_value = info["value"]
+            selected_name = preferred
+            log.info("[ball] Priority hit: Using %s (Stock: %d)", preferred, info["count"])
+            break
 
-        for item in items:
-            text = item.inner_text()
-            m    = pct_re.search(text)
-            if m:
-                pct = float(m.group(1))
-                log.info("[ball]   Option: '%-30s' → %.1f%%", text.strip(), pct)
-                if pct > best_pct:
-                    best_pct  = pct
-                    best_item = item
-                    best_name = normalize_ball_name(text)
+    # 5. Execute selection and throw
+    if not selected_value:
+        log.warning("[ball] 🚨 HẾT BÓNG! Không tìm thấy bóng hợp lệ cho Rank %s (Yêu cầu: %s)", rank, allowed_for_this_rank)
+        return None
 
-        for t_ball in target_balls:
-            for item in items:
-                text = item.inner_text()
-                if t_ball.lower() in text.lower():
-                    target_item = item
-                    target_name = normalize_ball_name(text)
-                    log.info("[ball] Found target ball '%s'", t_ball)
-                    break
-            if target_item:
-                break
-
-        final_item = target_item or best_item
-        chosen_ball = target_name if target_item else best_name
-
-        if final_item is not None:
-            if final_item == best_item and not target_item:
-                log.info("[ball] Target ball not found, clicking best option (%.1f%%).", best_pct)
-            else:
-                log.info("[ball] Clicking selected ball option.")
-            random_delay()
-            final_item.click()
-        else:
-            log.warning("[ball] No option with parseable %% found – aborting throw.")
-            return ""
-
-    # ── Confirm throw ────────────────────────────────────────────────────────
-    random_delay()
-    log.info("[ball] Clicking 'Dùng bóng'...")
     try:
+        dropdown.select_option(value=selected_value)
+        random_delay()
+        
         confirm_btn = page.get_by_role("button", name="Dùng bóng")
-        confirm_btn.wait_for(state="visible", timeout=10_000)
+        confirm_btn.wait_for(state="visible", timeout=5_000)
         confirm_btn.click()
-        return chosen_ball
-    except PlaywrightTimeoutError:
-        log.error("[ball] 'Dùng bóng' button not found.")
-        return ""
-
+        return selected_name
+    except Exception as e:
+        log.error("[ball] UI Error during ball throw: %s", e)
+        return None
 
 def _check_capture_result(page: Page) -> str:
     """
@@ -429,7 +348,9 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
 
         thrown = _select_and_throw_ball(page, rank)
         if not thrown:
-            log.error("[encounter] Throw failed (could not interact with UI) – aborting.")
+            log.warning("[encounter] 🚨 Cận cảnh: Hết bóng cho Rank %s! Bỏ chạy để dừng trận đấu.", rank)
+            send_telegram_alert(f"⚠️ <b>Hết bóng!</b> Bot đã hết loại bóng được phép dùng cho <b>{name}</b> (Rank {rank}). Đã tự động bỏ chạy.")
+            _flee(page)
             return ""
 
         outcome = _check_capture_result(page)

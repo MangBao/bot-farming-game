@@ -5,11 +5,13 @@ Contains:
     • random_delay()  – human-like sleep between UI interactions
 """
 
+import io
 import time
 import random
 import logging
 import requests
 import threading
+from PIL import Image
 
 import config
 
@@ -45,6 +47,11 @@ def send_telegram_alert(message: str) -> None:
         log.warning(f"[telegram_alert] Failed to send alert: {e}")
 
 
+def is_special_variant(pokemon_name: str) -> bool:
+    """Check if the Pokemon is a special variant (e.g., ESPEON (RAINBOW))."""
+    return "(" in pokemon_name
+
+
 BALL_IMAGE_URLS = {
     "PokeBall": f"https://{config.ASSETS_DOMAIN}/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539411/pokemon/PokeBall_nn6fs0.png",
     "Great Ball": f"https://{config.ASSETS_DOMAIN}/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539475/pokemon/GreatBall_qhe7x9.png",
@@ -52,61 +59,109 @@ BALL_IMAGE_URLS = {
     "MasterBall": f"https://{config.ASSETS_DOMAIN}/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539731/pokemon/MasterBall_gxo0hk.png"
 }
 
-def send_telegram_notification(pokemon_name: str, rank: str, hp: str, used_ball: str = "", image_url: str = None, is_new_pokedex: bool = False) -> None:
+def send_telegram_notification(
+    pokemon_name: str, 
+    rank: str, 
+    hp: str, 
+    used_ball: str = "PokeBall", 
+    image_url: str = None, 
+    is_new_pokedex: bool = False,
+    is_special_variant: bool = False
+) -> None:
     """
     Send a Telegram message when a high value Pokemon is caught.
-    Safely ignores exceptions to prevent bot crash if network error occurs.
+    Composites the Pokemon image with the used Ball icon.
     """
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
         return
 
-    # Prepare ball label with hidden hyperlink if mapped
-    ball_url = BALL_IMAGE_URLS.get(used_ball, "")
-    ball_display = f'<a href="{ball_url}">[ {used_ball} ]</a>' if ball_url else f'[ {used_ball} ]'
-
+    # 1. Prepare UI components
+    BALL_EMOJIS = {"PokeBall": "🔴", "Great Ball": "🔵", "Ultra Ball": "🟡", "MasterBall": "🟣"}
+    ball_emoji = BALL_EMOJIS.get(used_ball, "⚪")
     pokedex_badge = "🌟 <b>[ NEW POKEDEX ENTRY ]</b> 🌟\n" if is_new_pokedex else ""
+    variant_badge = "🌈 <b>[ POKEMON ĐẶC BIỆT ]</b> 🌈\n" if is_special_variant else ""
     
     caption = (
         f"🎊 <b>BẮT THÀNH CÔNG POKEMON!</b> 🎊\n\n"
-        f"{pokedex_badge}"
-        f"{ball_display} <b>Tên:</b> {pokemon_name}\n"
+        f"{pokedex_badge}{variant_badge}"
+        f"{ball_emoji} <b>[ {used_ball} ] Tên:</b> {pokemon_name}\n"
         f"✨ <b>Rank:</b> {rank}\n"
         f"💖 <b>HP:</b> {hp}\n\n"
         f"🤖 <i>Target Auto Bot</i>"
     )
-    
-    # Decide which API endpoint to use based on image type
-    try:
-        if image_url:
-            if ".gif" in image_url.lower() or ".mp4" in image_url.lower():
-                url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendAnimation"
-                payload = {
-                    "chat_id": config.TELEGRAM_CHAT_ID,
-                    "animation": image_url,
-                    "caption": caption,
-                    "parse_mode": "HTML"
-                }
-            else:
-                url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendPhoto"
-                payload = {
-                    "chat_id": config.TELEGRAM_CHAT_ID,
-                    "photo": image_url,
-                    "caption": caption,
-                    "parse_mode": "HTML"
-                }
-        else:
-            url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
-            payload = {
-                "chat_id": config.TELEGRAM_CHAT_ID,
-                "text": caption,
-                "parse_mode": "HTML"
-            }
 
-        response = requests.post(url, json=payload, timeout=10)
-        if response.status_code != 200:
-            log.warning(f"[telegram] Failed to send message. HTTP {response.status_code}: {response.text}")
-    except Exception as e:
-        log.warning(f"[telegram] Exception calling Telegram API: {e}")
+    # 2. Handle image processing
+    if image_url and image_url.startswith("/"):
+        image_url = f"{config.BASE_URL}{image_url}"
+
+    success = False
+    if image_url:
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Referer": f"{config.BASE_URL}/"
+            }
+            
+            # A. Download Pokemon image
+            pkm_response = requests.get(image_url, headers=headers, timeout=10)
+            if pkm_response.status_code == 200:
+                pkm_img = Image.open(io.BytesIO(pkm_response.content)).convert("RGBA")
+                
+                # B. Download and Overlay Ball icon (if applicable)
+                ball_url = BALL_IMAGE_URLS.get(used_ball)
+                if ball_url:
+                    try:
+                        ball_res = requests.get(ball_url, headers=headers, timeout=5)
+                        if ball_res.status_code == 200:
+                            ball_img = Image.open(io.BytesIO(ball_res.content)).convert("RGBA")
+                            
+                            # C. Composite: Resize ball and paste onto PKM image
+                            ball_icon_size = (int(pkm_img.width * 0.2), int(pkm_img.width * 0.2)) # Dynamic size (20% of width)
+                            # Or lock to 50x50 as requested
+                            ball_icon_size = (50, 50)
+                            ball_img.thumbnail(ball_icon_size, Image.Resampling.LANCZOS)
+                            
+                            # Bottom-right corner with 10px margin
+                            offset = (
+                                pkm_img.width - ball_img.width - 10,
+                                pkm_img.height - ball_img.height - 10
+                            )
+                            pkm_img.paste(ball_img, offset, ball_img)
+                    except Exception as e:
+                        log.warning(f"[telegram] Ball overlay failed, sending PKM image only: {e}")
+
+                # D. Convert composite to Bytes
+                output_bytes = io.BytesIO()
+                pkm_img.save(output_bytes, format="PNG")
+                output_bytes.seek(0)
+
+                # E. Send to Telegram
+                is_anim = ".gif" in image_url.lower() or ".mp4" in image_url.lower()
+                endpoint = "/sendAnimation" if is_anim else "/sendPhoto"
+                file_field = "animation" if is_anim else "photo"
+                
+                url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}{endpoint}"
+                data = {"chat_id": config.TELEGRAM_CHAT_ID, "caption": caption, "parse_mode": "HTML"}
+                files = {file_field: ("composite.png", output_bytes)}
+                
+                res = requests.post(url, data=data, files=files, timeout=15)
+                if res.status_code == 200:
+                    success = True
+                else:
+                    log.warning(f"[telegram] Upload rejected (HTTP {res.status_code}): {res.text}")
+            else:
+                log.warning(f"[telegram] Could not download PKM image (HTTP {pkm_response.status_code})")
+        except Exception as e:
+            log.warning(f"[telegram] Image compositing failed: {e}")
+
+    # 3. Fallback: Plaintext message
+    if not success:
+        url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": config.TELEGRAM_CHAT_ID, "text": caption, "parse_mode": "HTML"}
+        try:
+            requests.post(url, json=payload, timeout=5)
+        except Exception as e:
+            log.error(f"[telegram] Fatal notification failure: {e}")
 
 def send_telegram_reply(text: str):
     """Send a basic HTML-formatted text reply."""
