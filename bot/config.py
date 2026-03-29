@@ -118,3 +118,12 @@ QUESTION_SELECTORS: tuple[str, ...] = (
     "[role='dialog'] span",
     ".modal p",
 )
+# ---------------------------------------------------------------------------
+# Bot Global State (Runtime Statistics & Remote Control)
+# ---------------------------------------------------------------------------
+BOT_STATE = {
+    "is_paused": False,
+    "stats": {"encounters": 0, "caught": 0},
+    "last_update_id": 0,
+    "player_hp": "Unknown"
+}

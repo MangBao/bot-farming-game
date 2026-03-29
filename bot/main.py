@@ -21,8 +21,8 @@ import logging
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
 
 import config
-from utils import random_delay, send_telegram_notification
-from auth import login_and_navigate
+from utils import random_delay, random_sleep, send_telegram_notification, send_telegram_alert, start_telegram_listener
+from auth import login_and_navigate, auto_login
 from scanner import scan_pokemon
 from combat import handle_encounter
 
@@ -55,7 +55,40 @@ def run_bot(page: Page) -> None:
 
     while True:
         loop_count += 1
+        
+        if config.BOT_STATE.get("is_paused"):
+            if loop_count % 10 == 1:
+                log.info("[bot] ⏸️  Bot is currently PAUSED via Telegram. Waiting...")
+            time.sleep(3)
+            continue
+
         log.info("[bot] ── Loop #%d ──", loop_count)
+
+        # ── Remote Map Switch Check ──────────────────────────────────
+        if config.BOT_STATE.get("change_map_to"):
+            new_map_slug = config.BOT_STATE["change_map_to"]
+            target_url = f"{config.BASE_URL}/map/{new_map_slug}"
+            
+            log.info(f"[bot] Nhận lệnh Telegram: Chuyển vùng sang {target_url}")
+            try:
+                page.goto(target_url, wait_until="domcontentloaded")
+                page.wait_for_load_state("networkidle", timeout=20_000)
+                time.sleep(2) # UI settle time
+                
+                log.info(f"[bot] Chuyển map thành công: {new_map_slug}")
+                send_telegram_reply(f"✅ <b>Hạ cánh an toàn tại {new_map_slug.replace('-', ' ').title()}!</b>\nTiến hành quét khu vực mới...")
+            except Exception as e:
+                log.error(f"[bot] Lỗi khi chuyển vùng: {e}")
+                send_telegram_reply(f"❌ <b>Lỗi khi chuyển vùng:</b> <code>{str(e)}</code>")
+            finally:
+                config.BOT_STATE["change_map_to"] = None
+                continue # Restart loop to begin scanning new map immediately
+
+        # ── Auto-Recovery Check ──────────────────────────────────────
+        if not auto_login(page):
+            send_telegram_alert("🚨 Bot bị kẹt ở màn hình Đăng nhập hoặc mất kết nối!")
+            log.error("[bot] Lỗi nghiêm trọng: Không thể tự đăng nhập lại. Dừng bot.")
+            break
 
         try:
             # ── Scan ─────────────────────────────────────────────────────────
@@ -72,14 +105,17 @@ def run_bot(page: Page) -> None:
                 if caught_ball:
                     log.info("[bot] 🏆 Caught %s! Resuming scan.", pokemon["name"])
                     
-                    if pokemon["rank"] in config.HIGH_VALUE_RANKS:
+                    is_new = pokemon.get("is_new_pokedex", False)
+                    # Notify IF it's a high-value rank OR it's a new Pokedex entry
+                    if pokemon["rank"] in config.HIGH_VALUE_RANKS or is_new:
                         hp_str = f"{pokemon['current_hp']}/{pokemon['max_hp']}"
                         send_telegram_notification(
-                            pokemon["name"], 
-                            pokemon["rank"], 
-                            hp_str, 
+                            pokemon_name=pokemon["name"], 
+                            rank=pokemon["rank"], 
+                            hp=hp_str, 
                             used_ball=caught_ball, 
-                            image_url=pokemon.get("image_url")
+                            image_url=pokemon.get("image_url"),
+                            is_new_pokedex=is_new
                         )
                         log.info("[bot] 📱 Đã gửi thông báo Telegram cho %s!", pokemon["name"])
                 else:
@@ -152,6 +188,9 @@ def main() -> None:
         page    = context.new_page()
 
         try:
+            log.info("[main] Bắt đầu luồng lắng nghe Telegram ngầm...")
+            start_telegram_listener()
+            
             login_and_navigate(page)
             run_bot(page)             # ← enters the infinite loop
 

@@ -109,10 +109,15 @@ def scan_pokemon(page: Page) -> Optional[dict]:
         log.info("[scan] No wild Pokémon found this round.")
         return None
 
-    # ── Check Pokedex ────────────────────────────────────────────────────────
     is_new_pokedex = False
-    if "CHƯA CÓ TRONG POKEDEX" in page_text or "NEW -" in page_text:
-        is_new_pokedex = True
+    try:
+        # Check for both "CHƯA CÓ TRONG POKEDEX" and "NEW -" for maximum reliability
+        is_new_pokedex = page.get_by_text("CHƯA CÓ TRONG POKEDEX").is_visible(timeout=500) or "CHƯA CÓ TRONG POKEDEX" in page_text or "NEW -" in page_text
+    except Exception:
+        if "CHƯA CÓ TRONG POKEDEX" in page_text or "NEW -" in page_text:
+            is_new_pokedex = True
+            
+    if is_new_pokedex:
         log.info("[scan] 🌟 Found NEW Pokémon for Pokedex!")
 
     # ── Extract name and rank ────────────────────────────────────────────────
