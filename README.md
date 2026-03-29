@@ -84,10 +84,8 @@ cp .env.example .env
 ```env
 GAME_EMAIL=your_email_here
 GAME_PASSWORD=your_password_here
-GAME_BASE_URL=https://target-website.com
-GAME_LOGIN_URL=https://target-website.com/login
-GAME_API_BASE_URL=https://target-website.com/api
-GAME_TARGET_MAP=Vùng Johto
+GAME_HOST=target-website.com
+GAME_TARGET_MAP="Vùng Johto"
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
 ```

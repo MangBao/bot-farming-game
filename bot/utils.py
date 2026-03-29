@@ -46,10 +46,10 @@ def send_telegram_alert(message: str) -> None:
 
 
 BALL_IMAGE_URLS = {
-    "PokeBall": "https://cdn.vnpet.games/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539411/pokemon/PokeBall_nn6fs0.png",
-    "Great Ball": "https://cdn.vnpet.games/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539475/pokemon/GreatBall_qhe7x9.png",
-    "Ultra Ball": "https://cdn.vnpet.games/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539621/pokemon/UltraBall_jdphwp.png",
-    "MasterBall": "https://cdn.vnpet.games/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539731/pokemon/MasterBall_gxo0hk.png"
+    "PokeBall": f"https://{config.ASSETS_DOMAIN}/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539411/pokemon/PokeBall_nn6fs0.png",
+    "Great Ball": f"https://{config.ASSETS_DOMAIN}/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539475/pokemon/GreatBall_qhe7x9.png",
+    "Ultra Ball": f"https://{config.ASSETS_DOMAIN}/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539621/pokemon/UltraBall_jdphwp.png",
+    "MasterBall": f"https://{config.ASSETS_DOMAIN}/dovtqazow/image/upload/f_auto,q_auto:eco,dpr_auto,c_limit/v1770539731/pokemon/MasterBall_gxo0hk.png"
 }
 
 def send_telegram_notification(pokemon_name: str, rank: str, hp: str, used_ball: str = "", image_url: str = None, is_new_pokedex: bool = False) -> None:
@@ -72,7 +72,7 @@ def send_telegram_notification(pokemon_name: str, rank: str, hp: str, used_ball:
         f"{ball_display} <b>Tên:</b> {pokemon_name}\n"
         f"✨ <b>Rank:</b> {rank}\n"
         f"💖 <b>HP:</b> {hp}\n\n"
-        f"🤖 <i>VNPet Auto Bot</i>"
+        f"🤖 <i>Target Auto Bot</i>"
     )
     
     # Decide which API endpoint to use based on image type
@@ -154,7 +154,7 @@ def check_telegram_commands():
                         f"• <b>Đã gặp:</b> {config.BOT_STATE['stats']['encounters']} con\n"
                         f"• <b>Đã bắt:</b> {config.BOT_STATE['stats']['caught']} con\n"
                         f"• <b>HP Sếp:</b> <code>{config.BOT_STATE['player_hp']}</code>\n\n"
-                        f"🤖 <i>VNPet Remote Manager</i>"
+                        f"🤖 <i>Target Remote Manager</i>"
                     )
                     send_telegram_reply(status_text)
                 elif text == "/mapinfo":

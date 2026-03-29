@@ -37,13 +37,15 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID   = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # ---------------------------------------------------------------------------
-# URLs
+# Host and URLs - Derived from a single GAME_HOST for simplicity
 # ---------------------------------------------------------------------------
 import json
 
-BASE_URL = os.environ.get("GAME_BASE_URL", "https://target.com")
-LOGIN_URL = os.environ.get("GAME_LOGIN_URL", f"{BASE_URL}/login")
-API_BASE_URL = os.environ.get("GAME_API_BASE_URL", f"{BASE_URL}/api")
+GAME_HOST = os.environ.get("GAME_HOST", "example.com").strip('"\' ')
+BASE_URL = f"https://{GAME_HOST}"
+LOGIN_URL = f"{BASE_URL}/login"
+API_BASE_URL = f"{BASE_URL}/api"
+ASSETS_DOMAIN = f"cdn.{GAME_HOST}"
 
 TARGET_MAP = os.environ.get("GAME_TARGET_MAP", "Vùng Johto").strip('"\' ')
 maps_json_path = Path(__file__).parent / "maps.json"
