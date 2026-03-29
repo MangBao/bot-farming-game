@@ -1,0 +1,47 @@
+{
+    "Vùng Kanto": {
+        "unlocked": true,
+        "url": "/map/vung-kanto",
+        "requirement": ""
+    },
+    "Vùng Johto": {
+        "unlocked": true,
+        "url": "/map/vung-johto",
+        "requirement": ""
+    },
+    "Vùng Hoenn": {
+        "unlocked": true,
+        "url": "/map/vung-hoenn",
+        "requirement": ""
+    },
+    "Vùng Sinnoh": {
+        "unlocked": false,
+        "url": "",
+        "requirement": "Cần thêm 2997 lượt tìm kiếm tại Vùng Hoenn"
+    },
+    "Vùng Unova": {
+        "unlocked": false,
+        "url": "",
+        "requirement": "Cần thêm 4000 lượt tìm kiếm tại Vùng Sinnoh"
+    },
+    "Vùng Kalos": {
+        "unlocked": false,
+        "url": "",
+        "requirement": "Cần thêm 5000 lượt tìm kiếm tại Vùng Unova"
+    },
+    "Vùng Alola": {
+        "unlocked": false,
+        "url": "",
+        "requirement": "Cần thêm 5000 lượt tìm kiếm tại Vùng Kalos"
+    },
+    "Vùng Galar": {
+        "unlocked": false,
+        "url": "",
+        "requirement": "Cần thêm 5000 lượt tìm kiếm tại Vùng Alola"
+    },
+    "Vùng Paldea": {
+        "unlocked": false,
+        "url": "",
+        "requirement": "Cần thêm 10000 lượt tìm kiếm tại Vùng Galar"
+    }
+}
