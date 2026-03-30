@@ -69,7 +69,7 @@ def scan_pokemon(page: Page) -> Optional[dict]:
     log.info("[scan] Checking 'Tìm kiếm' button...")
     random_delay()
     search_btn = page.get_by_role("button", name="Tìm kiếm")
-    search_btn.wait_for(state="visible", timeout=15_000)
+    search_btn.wait_for(state="visible", timeout=10_000)
     
     # Check if a battle is already in progress (search button disabled)
     if search_btn.is_enabled():
@@ -79,8 +79,14 @@ def scan_pokemon(page: Page) -> Optional[dict]:
         # ── Handle math captcha (may or may not appear) ───────────────────────────
         captcha_solved = handle_math_captcha(page)
         if captcha_solved:
-            log.info("[scan] Captcha solved – waiting for result to load...")
-            page.wait_for_timeout(1_000)
+            log.info("[scan] Captcha solved – re-triggering search for reliable result...")
+            random_delay(1.5, 2.5)
+            # Re-click search because the game might not automatically load the encounter after captcha
+            if search_btn.is_visible() and search_btn.is_enabled():
+                search_btn.click()
+                log.info("[scan] Search re-triggered after captcha.")
+            else:
+                log.warning("[scan] Search button not available after captcha - continuing anyway.")
 
         # ── Wait for scan result (captcha-aware) ──────────────────────────────────
         try:
@@ -93,10 +99,10 @@ def scan_pokemon(page: Page) -> Optional[dict]:
                         || body.includes('Chiến đấu');
                 }
                 """,
-                timeout=25_000,   # extra 5 s budget to account for captcha round-trip
+                timeout=6_000,   # Set fixed 6s timeout for efficiency
             )
         except PlaywrightTimeoutError:
-            log.warning("[scan] Scan result did not appear within timeout.")
+            log.warning("[scan] Scan result did not appear within 6s - skipping to next loop.")
             return None
     else:
         # User left an unfinished encounter – the UI shows it immediately
