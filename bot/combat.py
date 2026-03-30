@@ -10,6 +10,7 @@ Contains:
 """
 
 import re
+import time
 import logging
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
@@ -65,19 +66,20 @@ def _select_and_throw_ball(page: Page, rank: str) -> str:
     log.info("[ball] ─── Selecting Pokéball for Rank %s ───", rank)
     random_delay()
 
-    # 1. Resource Priority Matrix
-    ALLOWED_BALLS = {
-        "UR+": ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
-        "UR": ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
-        "SSR": ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
-        "SS":  ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
-        "S":   ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"],
-        "A":   ["Ultra Ball", "Great Ball", "PokeBall"],
-        "B":   ["PokeBall", "Great Ball"],  # Prioritize PokeBall for cost-saving
-        "C":   ["PokeBall", "Great Ball"],
-        "D":   ["PokeBall", "Great Ball"],
-    }
-    allowed_for_this_rank = ALLOWED_BALLS.get(rank, ["PokeBall"])
+    # 1. Resource Priority Matrix (Strict Rulebook)
+    def _get_ball_priority(r: str) -> list:
+        r = r.upper()
+        # VIPs (S, SS, UR, EX, SSS...): Use best available starting from Master
+        if r in ["S", "SS", "UR", "EX", "SSS", "UR+", "SSR"]:
+            return ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"]
+        # Rank A: Ultra -> Great -> Poke (NO Master)
+        elif r == "A":
+            return ["Ultra Ball", "Great Ball", "PokeBall"]
+        # Rank B, C, D: Great -> Ultra -> Poke (NO Master)
+        else:
+            return ["Great Ball", "Ultra Ball", "PokeBall"]
+
+    allowed_for_this_rank = _get_ball_priority(rank)
 
     # 2. Locate and open Dropdown
     try:

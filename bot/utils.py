@@ -69,8 +69,8 @@ def send_telegram_notification(
     is_special_variant: bool = False
 ) -> None:
     """
-    Send a Telegram message when a high value Pokemon is caught.
-    Composites the Pokemon image with the used Ball icon.
+    Send a compact Telegram message with a 500x250 banner background.
+    Bypasses Telegram's auto-zooming by centering the Pokemon image on a fixed canvas.
     """
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
         return
@@ -97,71 +97,53 @@ def send_telegram_notification(
     success = False
     if image_url:
         try:
+            # A. Download Pokemon image (Fake User-Agent bypass)
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Referer": f"{config.BASE_URL}/"
             }
-            
-            # A. Download Pokemon image
             pkm_response = requests.get(image_url, headers=headers, timeout=10)
+            
             if pkm_response.status_code == 200:
                 pkm_img = Image.open(io.BytesIO(pkm_response.content)).convert("RGBA")
                 
-                # B. Download and Overlay Ball icon (if applicable)
-                ball_url = BALL_IMAGE_URLS.get(used_ball)
-                if ball_url:
-                    try:
-                        ball_res = requests.get(ball_url, headers=headers, timeout=5)
-                        if ball_res.status_code == 200:
-                            ball_img = Image.open(io.BytesIO(ball_res.content)).convert("RGBA")
-                            
-                            # C. Composite: Resize ball and paste onto PKM image
-                            ball_icon_size = (int(pkm_img.width * 0.2), int(pkm_img.width * 0.2)) # Dynamic size (20% of width)
-                            # Or lock to 50x50 as requested
-                            ball_icon_size = (50, 50)
-                            ball_img.thumbnail(ball_icon_size, Image.Resampling.LANCZOS)
-                            
-                            # Bottom-right corner with 10px margin
-                            offset = (
-                                pkm_img.width - ball_img.width - 10,
-                                pkm_img.height - ball_img.height - 10
-                            )
-                            pkm_img.paste(ball_img, offset, ball_img)
-                    except Exception as e:
-                        log.warning(f"[telegram] Ball overlay failed, sending PKM image only: {e}")
-
-                # D. Convert composite to Bytes
+                # B. Create a Banner Canvas (500x250, Dark Mode friendly #2B3136)
+                banner_width, banner_height = 500, 250
+                bg = Image.new("RGBA", (banner_width, banner_height), (43, 49, 54, 255))
+                
+                # C. Center the Pokemon on the banner
+                offset_x = (banner_width - pkm_img.width) // 2
+                offset_y = (banner_height - pkm_img.height) // 2
+                bg.paste(pkm_img, (offset_x, offset_y), pkm_img)
+                
+                # D. Export to Bytes
                 output_bytes = io.BytesIO()
-                pkm_img.save(output_bytes, format="PNG")
+                bg.save(output_bytes, format="PNG")
                 output_bytes.seek(0)
 
-                # E. Send to Telegram
-                is_anim = ".gif" in image_url.lower() or ".mp4" in image_url.lower()
-                endpoint = "/sendAnimation" if is_anim else "/sendPhoto"
-                file_field = "animation" if is_anim else "photo"
-                
-                url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}{endpoint}"
+                # E. Send as Photo to Telegram
+                url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendPhoto"
                 data = {"chat_id": config.TELEGRAM_CHAT_ID, "caption": caption, "parse_mode": "HTML"}
-                files = {file_field: ("composite.png", output_bytes)}
+                files = {"photo": ("pokemon_banner.png", output_bytes)}
                 
                 res = requests.post(url, data=data, files=files, timeout=15)
                 if res.status_code == 200:
                     success = True
                 else:
-                    log.warning(f"[telegram] Upload rejected (HTTP {res.status_code}): {res.text}")
+                    log.warning(f"[telegram] Photo upload rejected (HTTP {res.status_code}): {res.text}")
             else:
                 log.warning(f"[telegram] Could not download PKM image (HTTP {pkm_response.status_code})")
         except Exception as e:
-            log.warning(f"[telegram] Image compositing failed: {e}")
+            log.error(f"[telegram] Image Banner creation/upload failed: {e}")
 
-    # 3. Fallback: Plaintext message
+    # 3. Fallback: sendMessage if image failed
     if not success:
         url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {"chat_id": config.TELEGRAM_CHAT_ID, "text": caption, "parse_mode": "HTML"}
         try:
             requests.post(url, json=payload, timeout=5)
         except Exception as e:
-            log.error(f"[telegram] Fatal notification failure: {e}")
+            log.error(f"[telegram] Fatal notification breakdown: {e}")
 
 def send_telegram_reply(text: str):
     """Send a basic HTML-formatted text reply."""
