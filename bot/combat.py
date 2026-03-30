@@ -168,12 +168,23 @@ def _check_capture_result(page: Page) -> str:
 
     # ── State B: fled ────────────────────────────────────────────────────────
     FLED_KEYWORDS = (
-        "Pokemon đã thoát khỏi bóng và bỏ chạy",  # Game chính: "(Đã thử 3/3 lần)"
-        "thoát khỏi bóng",
-        "escaped", "ran away", "fled",
+        "pokemon đã chạy thoát",
+        "đã chạy thoát",
+        "chạy thoát",
+        "escaped from battle",
+        "fled",
     )
     if any(kw in result_text for kw in FLED_KEYWORDS):
         return "fled"
+
+    # ── State C: miss (escaped ball but still in battle) ─────────────────────
+    MISS_KEYWORDS = (
+        "thoát khỏi bóng",
+        "thử lại",
+        "escaped from ball",
+    )
+    if any(kw in result_text for kw in MISS_KEYWORDS):
+        return "miss"
 
     # Extra fled check: HP bar / Pokémon sprite no longer visible
     hp_bar = page.locator(
@@ -252,12 +263,12 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
         log.warning("[encounter] max_hp=0, skipping combat – throwing ball now.")
     else:
         # ── Combat loop: Dynamic damage tracking with log parser ──────────────
-        SAFE_HP_MARGIN       = 15    # Never attack below this absolute HP
         estimated_max_damage = 0
 
         for round_num in range(1, config.MAX_ATTACK_ROUNDS + 1):
-            hp_pct            = current_hp / max_hp
-            predicted_max_hit = estimated_max_damage + 5    # +5 buffer for crit variance
+            hp_pct = current_hp / max_hp
+            # TIGHT SAFETY: Only break if HP is <= max recorded damage + 1, or 12 if no data
+            predicted_max_hit = (estimated_max_damage + 1) if estimated_max_damage > 0 else 12
 
             log.info(
                 "[encounter] Round %2d | HP %d/%d (%.1f%%) | Est.MaxDmg: %d | PredictedHit: %d",
@@ -265,21 +276,12 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
                 estimated_max_damage, predicted_max_hit
             )
 
-            # ── SAFETY STOP: absolute floor check ────────────────────────────
-            if current_hp <= SAFE_HP_MARGIN:
-                log.info(
-                    "[encounter] ⚠️ Máu rớt vào vùng nguy hiểm (HP hiện tại: %d, "
-                    "Có thể sốc damage: %d). Dừng đánh, ném bóng!",
-                    current_hp, predicted_max_hit
-                )
-                break
-
             # ── SAFETY STOP: predictive kill check ───────────────────────────
-            if estimated_max_damage > 0 and current_hp <= predicted_max_hit:
+            if current_hp <= predicted_max_hit:
                 log.info(
-                    "[encounter] ⚠️ Máu rớt vào vùng nguy hiểm (HP hiện tại: %d, "
-                    "Có thể sốc damage: %d). Dừng đánh, ném bóng!",
-                    current_hp, predicted_max_hit
+                    "[encounter] 🎯 Máu đã xuống mức tối thiểu an toàn (HP: %d, Max Hit dự kiến: %d). Dừng đánh, tung bóng!", 
+                    current_hp, 
+                    predicted_max_hit
                 )
                 break
 
@@ -361,13 +363,14 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
             return thrown
 
         if outcome == "fled":
-            log.warning("[encounter] 💨 Pokemon đã chạy mất!")
+            log.warning("[encounter] 💨 Pokemon đã chạy thoát bặt vô âm tín!")
             return ""
 
-        # State C: miss, still in battle
-        log.info("[encounter] ❌ Bắt trượt lần %d, thử lại...", attempt + 1)
-        random_delay()
+        # outcome == "miss" -> Pokemon escaped ball but stays in battle
+        log.warning("[encounter] ⚠️ Pokemon thoát khỏi bóng! Thử lại hiệp %d...", attempt + 2 if attempt < MAX_THROWS-1 else attempt+1)
+        time.sleep(1.5)
+        # Continue the loop for next throw attempt
 
     # Loop exhausted
-    log.warning("[encounter] 🚫 Hết lượt ném, trở về map.")
+    log.warning("[encounter] 🚫 Hết lượt ném (3/3), kết thúc trận đấu.")
     return ""
