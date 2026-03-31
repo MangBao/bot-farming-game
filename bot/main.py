@@ -18,6 +18,7 @@ Import map (no circular dependencies):
 
 import time
 import logging
+import sys
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
 
 import config
@@ -26,10 +27,11 @@ from utils import (
     random_sleep, 
     send_telegram_notification, 
     send_telegram_alert, 
+    send_telegram_reply,
     start_telegram_listener,
     is_special_variant
 )
-from auth import login_and_navigate, auto_login
+from auth import login_and_navigate, auto_login, check_map_locked
 from scanner import scan_pokemon
 from combat import handle_encounter
 
@@ -80,10 +82,14 @@ def run_bot(page: Page) -> None:
             try:
                 page.goto(target_url, wait_until="domcontentloaded")
                 page.wait_for_load_state("networkidle", timeout=20_000)
-                time.sleep(2) # UI settle time
-                
                 log.info(f"[bot] Chuyển map thành công: {new_map_slug}")
-                send_telegram_reply(f"✅ <b>Hạ cánh an toàn tại {new_map_slug.replace('-', ' ').title()}!</b>\nTiến hành quét khu vực mới...")
+                
+                # Check if the map we just jumped to is actually locked
+                if check_map_locked(page):
+                    log.error("[bot] Lệnh chuyển map thất bại do Map bị khóa.")
+                    # We don't exit here to allow user to try another map via Telegram
+                else:
+                    send_telegram_reply(f"✅ <b>Hạ cánh an toàn tại {new_map_slug.replace('-', ' ').title()}!</b>\nTiến hành quét khu vực mới...")
             except Exception as e:
                 log.error(f"[bot] Lỗi khi chuyển vùng: {e}")
                 send_telegram_reply(f"❌ <b>Lỗi khi chuyển vùng:</b> <code>{str(e)}</code>")
@@ -100,40 +106,37 @@ def run_bot(page: Page) -> None:
         try:
             # ── Scan ─────────────────────────────────────────────────────────
             pokemon = scan_pokemon(page)
-
             if pokemon:
-                log.info(
-                    "[bot] Found: %s | Rank: %s | HP: %d/%d",
-                    pokemon["name"], pokemon["rank"],
-                    pokemon["current_hp"], pokemon["max_hp"],
-                )
+                is_vip     = pokemon["rank"] in config.ALWAYS_CATCH_RANKS
+                is_new     = pokemon.get("is_new_pokedex", False)
+                is_special = is_special_variant(pokemon["name"])
+
+                # Decision: Catch vs Kill (Farm)
+                intent = "catch" if (is_vip or is_new or is_special) else "kill"
+                
+                if intent == "catch":
+                    log.info("[bot] 🎯 Mục tiêu giá trị cao! Thiết lập chế độ: BẮT (Catch).")
+                else:
+                    log.info("[bot] 🚜 Quái cỏ/Đã có trong Pokedex. Thiết lập chế độ: TIÊU DIỆT (Farm).")
+
                 random_delay()
-                caught_ball = handle_encounter(page, pokemon)
+                caught_ball = handle_encounter(page, pokemon, intent=intent)
+                
                 if caught_ball:
                     log.info("[bot] 🏆 Caught %s! Resuming scan.", pokemon["name"])
-                    
-                    is_new = pokemon.get("is_new_pokedex", False)
-                    is_special = is_special_variant(pokemon["name"])
-                    
-                    # Notify IF it's high-value, new, or a special variant
-                    if pokemon["rank"] in config.HIGH_VALUE_RANKS or is_new or is_special:
-                        hp_str = f"{pokemon['current_hp']}/{pokemon['max_hp']}"
-                        
-                        if is_special:
-                            log.info(f"[bot] 🌈 PHÁT HIỆN BIẾN THỂ ĐẶC BIỆT: {pokemon['name']}!")
-                            
-                        send_telegram_notification(
-                            pokemon_name=pokemon["name"], 
-                            rank=pokemon["rank"], 
-                            hp=hp_str, 
-                            used_ball=caught_ball, 
-                            image_url=pokemon.get("image_url"),
-                            is_new_pokedex=is_new,
-                            is_special_variant=is_special
-                        )
-                        log.info("[bot] 📱 Đã gửi thông báo Telegram cho %s!", pokemon["name"])
+                    hp_str = f"{pokemon['current_hp']}/{pokemon['max_hp']}"
+                    send_telegram_notification(
+                        pokemon_name=pokemon["name"], 
+                        rank=pokemon["rank"], 
+                        hp=hp_str, 
+                        used_ball=caught_ball, 
+                        image_url=pokemon.get("image_url"),
+                        is_new_pokedex=is_new,
+                        is_special_variant=is_special
+                    )
+                    log.info("[bot] 📱 Đã gửi thông báo Telegram cho %s!", pokemon["name"])
                 else:
-                    log.info("[bot] 🔄 Encounter ended (fled/miss/skipped). Back to scan.")
+                    log.info("[bot] 🔄 Encounter ended (killed/fled/miss). Back to scan.")
             else:
                 log.info("[bot] No Pokémon this round – waiting before retry.")
                 random_delay(config.RETRY_DELAY_MIN, config.RETRY_DELAY_MAX)

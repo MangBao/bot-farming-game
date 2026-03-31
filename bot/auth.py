@@ -6,10 +6,11 @@ Contains:
 """
 
 import logging
+import sys
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
 import config
-from utils import random_delay, random_sleep
+from utils import random_delay, random_sleep, send_telegram_reply
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +55,36 @@ def auto_login(page: Page) -> bool:
     except Exception as e:
         log.error(f"[auto_login] Lỗi khi auto-login: {e}")
         return False
+
+def check_map_locked(page: Page) -> bool:
+    """Check if the current map is locked by looking for requirement text."""
+    log.info("[auth] Đang kiểm tra trạng thái map...")
+    page.wait_for_timeout(2000) # Quick settle time
+    
+    # Common lock indicators: 'Yêu cầu tìm kiếm:', 'Yêu cầu cấp:', 'Cần thêm'
+    lock_selectors = [
+        "text='Yêu cầu tìm kiếm:'",
+        "text='Yêu cầu cấp:'",
+        "text='Cần thêm'",
+        "text='đã bị khóa'"
+    ]
+    
+    is_locked = False
+    for selector in lock_selectors:
+        try:
+            if page.locator(selector).is_visible(timeout=1000):
+                is_locked = True
+                break
+        except Exception:
+            continue
+            
+    if is_locked:
+        error_msg = f"⛔ MAP BỊ KHÓA! Bot không thể cày ở {config.TARGET_MAP} vì chưa đủ điều kiện."
+        log.error(error_msg)
+        send_telegram_reply(f"⚠️ <b>BÁO ĐỘNG TỪ AUTO BOT</b> ⚠️\n\n{error_msg}\n\n<i>Hãy dùng lệnh /map để chuyển vùng hoặc đổi map trong .env!</i>")
+        return True
+    
+    return False
 
 def login_and_navigate(page: Page) -> None:
     """
@@ -100,8 +131,14 @@ def login_and_navigate(page: Page) -> None:
         log.info("[auth] Login successful! URL: %s", current_url)
 
     # ── Navigate to map ──────────────────────────────────────────────────────
-    log.info("[auth] Navigating to Johto map: %s", config.MAP_URL)
+    log.info("[auth] Navigating to map: %s", config.MAP_URL)
     page.goto(config.MAP_URL, wait_until="domcontentloaded")
     page.wait_for_load_state("networkidle", timeout=30_000)
-    log.info("[auth] Arrived at Johto map.")
+    
+    # ── Map Lock Security Check ──────────────────────────────────────────────
+    if check_map_locked(page):
+        log.info("[auth] Map is locked. Shutting down bot to prevent errors.")
+        sys.exit(1)
+        
+    log.info("[auth] Arrived at map successfully.")
     random_delay()

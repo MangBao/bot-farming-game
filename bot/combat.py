@@ -208,23 +208,19 @@ def _check_capture_result(page: Page) -> str:
 # Public encounter handler
 # ===========================================================================
 
-def handle_encounter(page: Page, pokemon_data: dict) -> str:
+def handle_encounter(page: Page, pokemon_data: dict, intent: str = "catch") -> str:
     """
-    Decide whether to flee or fight, then manage the capture loop.
-
-    Throwing logic:
-        - Max 3 ball attempts (Pokémon flees after 3 misses).
-        - Each attempt classifies the result as: success / fled / miss.
-        - Returns True on capture, False on flee or exhausted attempts.
+    Decide whether to kill or catch, then manage the combat/capture loop.
 
     Args:
         page         : Active Playwright page on the encounter screen.
         pokemon_data : Dict from scan_pokemon() {name, rank, current_hp, max_hp,
                        player_hp, player_max, is_new_pokedex}.
+        intent       : "catch" (weaken & throw) or "kill" (attack until 0 HP).
 
     Returns:
         String of the ball used (e.g. "PokeBall") if caught.
-        Empty string "" if Pokémon fled or all attempts were exhausted.
+        Empty string "" if Pokémon fled, was killed, or all attempts were exhausted.
     """
     name       = pokemon_data.get("name", "Unknown")
     rank       = pokemon_data.get("rank", "Unknown")
@@ -249,17 +245,6 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
         _flee(page)
         return ""
 
-    # ── Smart Rank Gate ───────────────────────────────────────────────────────
-    if rank not in config.ALWAYS_CATCH_RANKS:
-        if is_new:
-            log.info("[encounter] 🌟 POKEMON MỚI (Rank %s)! Bỏ qua lọc Rank, tiến hành bắt.", rank)
-        else:
-            log.info("[encounter] Rank '%s' đã có trong Pokedex → Bỏ chạy để tiết kiệm bóng.", rank)
-            _flee(page)
-            return ""
-    else:
-        log.info("[encounter] 🎯 Hàng VIP Rank '%s' – Tiến hành bắt.", rank)
-
     # ── Edge case: HP unreadable → skip weakening, throw immediately ──────────
     if max_hp == 0:
         log.warning("[encounter] max_hp=0, skipping combat – throwing ball now.")
@@ -279,13 +264,17 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
             )
 
             # ── SAFETY STOP: predictive kill check ───────────────────────────
-            if current_hp <= predicted_max_hit:
+            if intent == "catch" and current_hp <= predicted_max_hit:
                 log.info(
                     "[encounter] 🎯 Máu đã xuống mức tối thiểu an toàn (HP: %d, Max Hit dự kiến: %d). Dừng đánh, tung bóng!", 
                     current_hp, 
                     predicted_max_hit
                 )
                 break
+            
+            if intent == "kill" and current_hp <= 0:
+                log.info("[encounter] 💀 Đã tiêu diệt %s! Cày xu thành công.", name)
+                return ""
 
             # ── SAFETY STOP: Check if player fainted ─────────────────────────
             attack_btn = page.get_by_role("button", name=re.compile("Chiến đấu|Tấn công|Attack", re.I))
@@ -339,11 +328,20 @@ def handle_encounter(page: Page, pokemon_data: dict) -> str:
                 log.info("[encounter] Updated estimated_max_damage: %d", estimated_max_damage)
             else:
                 log.info("[encounter] Đánh hụt/Máu không đổi, tiếp tục cẩn thận.")
+                
+            # Post-attack check for kill intent
+            if intent == "kill" and (new_hp <= 0 or not page.get_by_role("button", name=re.compile("Chiến đấu|Tấn công|Attack", re.I)).is_visible()):
+                log.info("[encounter] 💀 Mục tiêu đã bị hạ gục!")
+                return ""
         else:
             log.warning(
-                "[encounter] Max attack rounds (%d) reached – proceeding to throw anyway.",
+                "[encounter] Max attack rounds (%d) reached.",
                 config.MAX_ATTACK_ROUNDS,
             )
+
+    # ── Final safeguard for kill intent
+    if intent == "kill":
+        return ""
 
     # ── Capture loop: up to 3 attempts ───────────────────────────────────────
     MAX_THROWS = 3

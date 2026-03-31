@@ -47,6 +47,9 @@ LOGIN_URL = f"{BASE_URL}/login"
 API_BASE_URL = f"{BASE_URL}/api"
 ASSETS_DOMAIN = f"cdn.{GAME_HOST}"
 
+# ---------------------------------------------------------------------------
+# Map configuration - dynamically resolved from maps.json or raw slug
+# ---------------------------------------------------------------------------
 TARGET_MAP = os.environ.get("GAME_TARGET_MAP", "Vùng Johto").strip('"\' ')
 maps_json_path = Path(__file__).parent / "maps.json"
 
@@ -54,16 +57,26 @@ try:
     with open(maps_json_path, encoding='utf-8') as f:
         maps_data = json.load(f)
 except FileNotFoundError:
-    raise FileNotFoundError(f"[config] Missing maps.json at {maps_json_path}. Please run python tools/parse_maps.py first.")
+    maps_data = {}
 
-if TARGET_MAP not in maps_data:
-    raise ValueError(f"[config] Unknown map '{TARGET_MAP}'. Valid maps are: {', '.join(maps_data.keys())}")
-
-map_info = maps_data[TARGET_MAP]
-if not map_info.get("unlocked", False):
-    raise ValueError(f"[config] Map '{TARGET_MAP}' is LOCKED! Requirement: {map_info.get('requirement', 'Unknown')}")
-
-MAP_URL = BASE_URL + map_info["url"]
+# Use map from JSON if found, otherwise treat as raw relative URL slug
+if TARGET_MAP in maps_data:
+    map_info = maps_data[TARGET_MAP]
+    rel_url = map_info.get("url")
+    
+    # If the JSON doesn't have an URL (e.g. locked map), generate it from the key
+    if not rel_url:
+        slug = TARGET_MAP.replace(" ", "-").lower()
+        rel_url = f"/map/{slug}"
+        
+    MAP_URL = f"{BASE_URL}{rel_url}"
+else:
+    # Allow raw slugs like 'vung-sinnoh' directly from .env
+    slug = TARGET_MAP.replace(" ", "-").lower()
+    if not slug.startswith("/map/"):
+        slug = f"/map/{slug}"
+    MAP_URL = f"{BASE_URL}{slug}"
+    log.info(f"[config] Using custom map URL: {MAP_URL}")
 
 
 # ---------------------------------------------------------------------------
