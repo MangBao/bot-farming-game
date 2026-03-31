@@ -109,6 +109,9 @@ MAX_ERRORS_BEFORE_RELOGIN: int = 3
 # Known rank tokens ordered rarest → most common (for regex detection)
 RANK_TOKENS: tuple[str, ...] = ("GOD", "GR", "MR", "LR", "UR+", "UR", "SSR", "SR", "R", "SSS+", "SSS", "SS", "S", "A", "B", "C", "D")
 
+# Bật True để ưu tiên Ultra Ball cho mọi quái từ Rank A trở xuống. False để dùng Great Ball cho quái cỏ.
+SPAM_ULTRA_BALL = os.environ.get("SPAM_ULTRA_BALL", "True").upper() == "TRUE"
+
 # ---------------------------------------------------------------------------
 # Captcha selectors
 # ---------------------------------------------------------------------------

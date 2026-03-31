@@ -54,10 +54,32 @@ def _attack(page: Page) -> None:
     except PlaywrightTimeoutError:
         log.error("[attack] Attack button not found within timeout.")
 
+def get_ball_priority(rank: str) -> list:
+    """
+    Returns a list of ball names in preferred order based on the rank 
+    and the luxury mode (SPAM_ULTRA_BALL).
+    """
+    rank = rank.upper()
+    
+    # 1. VIP (S, SS, UR...): Always use MasterBall first
+    if rank in ["S", "SS", "UR", "EX", "SSS"]:
+        return ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"]
+        
+    # 2. Luxury Mode: Spam Ultra Ball for other ranks (A, B, C, D)
+    if config.SPAM_ULTRA_BALL:
+        # NO MasterBall allowed here
+        return ["Ultra Ball", "Great Ball", "PokeBall"]
+        
+    # 3. Economy Mode (False)
+    if rank == "A":
+        return ["Ultra Ball", "Great Ball", "PokeBall"]
+    else: # Rank B, C, D
+        return ["Great Ball", "Ultra Ball", "PokeBall"]
+
 def _select_and_throw_ball(page: Page, rank: str) -> str:
     """
     Open Pokéball dropdown, parse stock counts, and pick the best ball 
-    based on the ALLOWED_BALLS priority matrix for the given rank.
+    based on the priority matrix for the given rank.
 
     Returns:
     - Ball name (str) if a ball was successfully thrown.
@@ -66,20 +88,7 @@ def _select_and_throw_ball(page: Page, rank: str) -> str:
     log.info("[ball] ─── Selecting Pokéball for Rank %s ───", rank)
     random_delay()
 
-    # 1. Resource Priority Matrix (Strict Rulebook)
-    def _get_ball_priority(r: str) -> list:
-        r = r.upper()
-        # VIPs (S, SS, UR, EX, SSS...): Use best available starting from Master
-        if r in ["S", "SS", "UR", "EX", "SSS", "UR+", "SSR"]:
-            return ["MasterBall", "Ultra Ball", "Great Ball", "PokeBall"]
-        # Rank A: Ultra -> Great -> Poke (NO Master)
-        elif r == "A":
-            return ["Ultra Ball", "Great Ball", "PokeBall"]
-        # Rank B, C, D: Great -> Ultra -> Poke (NO Master)
-        else:
-            return ["Great Ball", "Ultra Ball", "PokeBall"]
-
-    allowed_for_this_rank = _get_ball_priority(rank)
+    allowed_for_this_rank = get_ball_priority(rank)
 
     # 2. Locate and open Dropdown
     try:
