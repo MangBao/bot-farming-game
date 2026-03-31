@@ -42,9 +42,9 @@ def send_telegram_alert(message: str) -> None:
             "text": f"⚠️ <b>CẢNH BÁO TỪ BOT:</b>\n\n{message}",
             "parse_mode": "HTML"
         }
-        requests.post(url, json=payload, timeout=5)
-    except Exception as e:
-        log.warning(f"[telegram_alert] Failed to send alert: {e}")
+        requests.post(url, json=payload, timeout=3)
+    except Exception:
+        pass
 
 
 def is_special_variant(pokemon_name: str) -> bool:
@@ -126,11 +126,9 @@ def send_telegram_notification(
                 data = {"chat_id": config.TELEGRAM_CHAT_ID, "caption": caption, "parse_mode": "HTML"}
                 files = {"photo": ("pokemon_banner.png", output_bytes)}
                 
-                res = requests.post(url, data=data, files=files, timeout=15)
+                res = requests.post(url, data=data, files=files, timeout=3)
                 if res.status_code == 200:
                     success = True
-                else:
-                    log.warning(f"[telegram] Photo upload rejected (HTTP {res.status_code}): {res.text}")
             else:
                 log.warning(f"[telegram] Could not download PKM image (HTTP {pkm_response.status_code})")
         except Exception as e:
@@ -141,9 +139,9 @@ def send_telegram_notification(
         url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {"chat_id": config.TELEGRAM_CHAT_ID, "text": caption, "parse_mode": "HTML"}
         try:
-            requests.post(url, json=payload, timeout=5)
-        except Exception as e:
-            log.error(f"[telegram] Fatal notification breakdown: {e}")
+            requests.post(url, json=payload, timeout=3)
+        except Exception:
+            pass
 
 def send_telegram_reply(text: str):
     """Send a basic HTML-formatted text reply."""
@@ -151,7 +149,7 @@ def send_telegram_reply(text: str):
         return
     url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendMessage"
     try:
-        requests.post(url, json={"chat_id": config.TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=5)
+        requests.post(url, json={"chat_id": config.TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=3)
     except Exception:
         pass
 

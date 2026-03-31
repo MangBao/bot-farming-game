@@ -2,7 +2,7 @@
 combat.py – Encounter handling: flee, attack, throw ball, capture result check.
 
 Contains:
-    • _flee(page)
+    • flee(page)
     • _attack(page)
     • _select_and_throw_ball(page, rank)  → bool
     • _check_capture_result(page)         → str  ('success' | 'fled' | 'miss')
@@ -25,18 +25,28 @@ log = logging.getLogger(__name__)
 # Private action helpers
 # ===========================================================================
 
-def _flee(page: Page) -> None:
-    """Click 'Bỏ chạy' and wait for the encounter screen to close."""
-    log.info("[flee] Fleeing encounter...")
-    random_delay()
+def flee(page: Page) -> bool:
+    """Click 'Bỏ chạy' or force reload if UI is stuck."""
+    log.info("[flee] Đang thử bỏ chạy...")
     try:
-        flee_btn = page.get_by_role("button", name="Bỏ chạy")
-        flee_btn.wait_for(state="visible", timeout=10_000)
-        flee_btn.click()
-        page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=10_000)
-        log.info("[flee] Fled successfully.")
-    except PlaywrightTimeoutError:
-        log.error("[flee] 'Bỏ chạy' or 'Tìm kiếm' not found or timed out.")
+        flee_btn = page.get_by_text("Bỏ chạy")
+        if flee_btn.is_visible(timeout=3000):
+            flee_btn.click()
+            log.info("[flee] Bấm nút Bỏ chạy thành công.")
+            page.wait_for_timeout(2000)
+            return True
+        else:
+             raise Exception("Nút Bỏ chạy không hiển thị")
+    except Exception as e:
+        log.warning(f"[flee] Không thể bấm Bỏ chạy (Game chặn hoặc kẹt UI): {e}")
+        log.info("[flee] 🔄 ÉP TẢI LẠI TRANG (Hard Reset) để gỡ kẹt...")
+        try:
+            page.reload(timeout=15000)
+            page.wait_for_load_state("networkidle", timeout=10_000)
+            page.wait_for_timeout(3000)
+        except Exception:
+            pass
+        return False
 
 
 def _attack(page: Page) -> None:
@@ -251,7 +261,7 @@ def handle_encounter(page: Page, pokemon_data: dict, intent: str = "catch") -> s
             "[encounter] 🚨 BÁO ĐỘNG! Máu phe mình quá yếu (%.1f%%). Bỏ chạy để bảo toàn!",
             (player_hp / player_max) * 100
         )
-        _flee(page)
+        flee(page)
         return ""
 
     # ── Edge case: HP unreadable → skip weakening, throw immediately ──────────
@@ -290,7 +300,7 @@ def handle_encounter(page: Page, pokemon_data: dict, intent: str = "catch") -> s
             if not attack_btn.is_visible(timeout=3_000) or not attack_btn.is_enabled():
                  log.warning("[encounter] 🚨 BÁO ĐỘNG: Nút chiến đấu biến mất/vô hiệu hóa! Pokemon phe mình đã kiệt sức.")
                  send_telegram_alert(f"🚨 BÁO ĐỘNG: Pokemon của bạn đã kiệt sức (Hết HP) khi đang đánh {name}! Bot tạm dừng chiến đấu.")
-                 _flee(page)
+                 flee(page)
                  return ""
 
             # ── Attack ───────────────────────────────────────────────────────
@@ -320,7 +330,7 @@ def handle_encounter(page: Page, pokemon_data: dict, intent: str = "catch") -> s
                     "[encounter] 🚨 BÁO ĐỘNG! Phe mình máu dưới 15%% (%.1f%%). Chạy ngay đi!",
                     (new_p_hp / new_p_max) * 100
                 )
-                _flee(page)
+                flee(page)
                 return ""
 
             # Compute damage_dealt from HP diff if log parse failed
@@ -361,7 +371,7 @@ def handle_encounter(page: Page, pokemon_data: dict, intent: str = "catch") -> s
         if not thrown:
             log.warning("[encounter] 🚨 Cận cảnh: Hết bóng cho Rank %s! Bỏ chạy để dừng trận đấu.", rank)
             send_telegram_alert(f"⚠️ <b>Hết bóng!</b> Bot đã hết loại bóng được phép dùng cho <b>{name}</b> (Rank {rank}). Đã tự động bỏ chạy.")
-            _flee(page)
+            flee(page)
             return ""
 
         outcome = _check_capture_result(page)

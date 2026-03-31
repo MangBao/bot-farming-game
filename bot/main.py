@@ -33,7 +33,7 @@ from utils import (
 )
 from auth import login_and_navigate, auto_login, check_map_locked
 from scanner import scan_pokemon
-from combat import handle_encounter
+from combat import handle_encounter, flee
 
 log = logging.getLogger(__name__)
 
@@ -111,16 +111,20 @@ def run_bot(page: Page) -> None:
                 is_new     = pokemon.get("is_new_pokedex", False)
                 is_special = is_special_variant(pokemon["name"])
 
-                # Decision: Catch vs Kill (Farm)
-                intent = "catch" if (is_vip or is_new or is_special) else "kill"
-                
-                if intent == "catch":
-                    log.info("[bot] 🎯 Mục tiêu giá trị cao! Thiết lập chế độ: BẮT (Catch).")
+                if is_vip or is_new or is_special:
+                    log.info(f"[bot] Phát hiện mục tiêu CẦN BẮT: {pokemon['name']}. Tiến hành ép máu...")
+                    random_delay()
+                    caught_ball = handle_encounter(page, pokemon, intent="catch")
                 else:
-                    log.info("[bot] 🚜 Quái cỏ/Đã có trong Pokedex. Thiết lập chế độ: TIÊU DIỆT (Farm).")
-
-                random_delay()
-                caught_ball = handle_encounter(page, pokemon, intent=intent)
+                    # Xử lý Pokemon đã có trong Pokedex
+                    if config.AUTO_KILL_DUPLICATES:
+                        log.info(f"[bot] {pokemon['name']} đã có trong Pokedex. Chế độ: TIÊU DIỆT (Cày xu).")
+                        random_delay()
+                        caught_ball = handle_encounter(page, pokemon, intent="kill")
+                    else:
+                        log.info(f"[bot] {pokemon['name']} đã có trong Pokedex. Chế độ: BỎ QUA (Tiết kiệm thời gian).")
+                        flee(page)
+                        caught_ball = ""
                 
                 if caught_ball:
                     log.info("[bot] 🏆 Caught %s! Resuming scan.", pokemon["name"])

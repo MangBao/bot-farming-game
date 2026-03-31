@@ -112,6 +112,9 @@ RANK_TOKENS: tuple[str, ...] = ("GOD", "GR", "MR", "LR", "UR+", "UR", "SSR", "SR
 # Bật True để ưu tiên Ultra Ball cho mọi quái từ Rank A trở xuống. False để dùng Great Ball cho quái cỏ.
 SPAM_ULTRA_BALL = os.environ.get("SPAM_ULTRA_BALL", "True").upper() == "TRUE"
 
+# True: Đánh đến chết để cày xu. False: Bỏ chạy ngay lập tức để tiết kiệm thời gian.
+AUTO_KILL_DUPLICATES = os.environ.get("AUTO_KILL_DUPLICATES", "False").upper() == "TRUE"
+
 # ---------------------------------------------------------------------------
 # Captcha selectors
 # ---------------------------------------------------------------------------
