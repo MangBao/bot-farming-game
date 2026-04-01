@@ -107,22 +107,29 @@ def run_bot(page: Page) -> None:
             # ── Scan ─────────────────────────────────────────────────────────
             pokemon = scan_pokemon(page)
             if pokemon:
-                is_vip     = pokemon["rank"] in config.ALWAYS_CATCH_RANKS
-                is_new     = pokemon.get("is_new_pokedex", False)
-                is_special = is_special_variant(pokemon["name"])
+                # Lấy tên và Rank để kiểm tra điều kiện
+                pkm_name_upper = pokemon['name'].upper()
+                is_vip         = pokemon["rank"] in config.ALWAYS_CATCH_RANKS
+                is_new         = pokemon.get("is_new_pokedex", False)
+                is_special     = is_special_variant(pokemon["name"])
+                is_must_catch  = pkm_name_upper in config.SPECIAL_CATCH_LIST
 
-                if is_vip or is_new or is_special:
-                    log.info(f"[bot] Phát hiện mục tiêu CẦN BẮT: {pokemon['name']}. Tiến hành ép máu...")
+                if is_must_catch or is_vip or is_new or is_special:
+                    if is_must_catch:
+                        log.info(f"[bot] 🚨 MỤC TIÊU ĐẶC BIỆT: {pkm_name_upper}! Tiến hành bắt ngay lập tức.")
+                    else:
+                        log.info(f"[bot] Phát hiện Pokemon cần bắt (VIP/New/Variant): {pkm_name_upper}. Tiến hành ép máu...")
+                    
                     random_delay()
                     caught_ball = handle_encounter(page, pokemon, intent="catch")
                 else:
                     # Xử lý Pokemon đã có trong Pokedex
                     if config.AUTO_KILL_DUPLICATES:
-                        log.info(f"[bot] {pokemon['name']} đã có trong Pokedex. Chế độ: TIÊU DIỆT (Cày xu).")
+                        log.info(f"[bot] {pkm_name_upper} đã có trong Pokedex. Chế độ: TIÊU DIỆT (Cày xu).")
                         random_delay()
                         caught_ball = handle_encounter(page, pokemon, intent="kill")
                     else:
-                        log.info(f"[bot] {pokemon['name']} đã có trong Pokedex. Chế độ: BỎ QUA (Tiết kiệm thời gian).")
+                        log.info(f"[bot] {pkm_name_upper} đã có trong Pokedex. Chế độ: BỎ QUA (Tiết kiệm thời gian).")
                         flee(page)
                         caught_ball = ""
                 
@@ -136,7 +143,8 @@ def run_bot(page: Page) -> None:
                         used_ball=caught_ball, 
                         image_url=pokemon.get("image_url"),
                         is_new_pokedex=is_new,
-                        is_special_variant=is_special
+                        is_special_variant=is_special,
+                        is_must_catch=is_must_catch
                     )
                     log.info("[bot] 📱 Đã gửi thông báo Telegram cho %s!", pokemon["name"])
                 else:

@@ -66,7 +66,8 @@ def send_telegram_notification(
     used_ball: str = "PokeBall", 
     image_url: str = None, 
     is_new_pokedex: bool = False,
-    is_special_variant: bool = False
+    is_special_variant: bool = False,
+    is_must_catch: bool = False
 ) -> None:
     """
     Send a compact Telegram message with a 500x250 banner background.
@@ -80,10 +81,11 @@ def send_telegram_notification(
     ball_emoji = BALL_EMOJIS.get(used_ball, "⚪")
     pokedex_badge = "🌟 <b>[ NEW POKEDEX ENTRY ]</b> 🌟\n" if is_new_pokedex else ""
     variant_badge = "🌈 <b>[ POKEMON ĐẶC BIỆT ]</b> 🌈\n" if is_special_variant else ""
+    must_catch_badge = "🌟 <b>[ MỤC TIÊU ĐẶC BIỆT ]</b> 🌟\n" if is_must_catch else ""
     
     caption = (
         f"🎊 <b>BẮT THÀNH CÔNG POKEMON!</b> 🎊\n\n"
-        f"{pokedex_badge}{variant_badge}"
+        f"{must_catch_badge}{pokedex_badge}{variant_badge}"
         f"{ball_emoji} <b>[ {used_ball} ] Tên:</b> {pokemon_name}\n"
         f"✨ <b>Rank:</b> {rank}\n"
         f"💖 <b>HP:</b> {hp}\n\n"
