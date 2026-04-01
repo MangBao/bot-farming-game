@@ -8,14 +8,58 @@ Contains:
 
 import re
 import logging
-from typing import Optional
+from typing import Optional, List
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError
 
 import config
-from utils import random_delay
+from utils import random_delay, load_special_pokemon, save_special_pokemon
 from captcha import handle_math_captcha
 
 log = logging.getLogger(__name__)
+
+def scrape_special_pokemon_from_ui(page: Page, current_map_slug: str) -> List[str]:
+    """
+    Scrape 'Pokemon Đặc Biệt' names from the current map's UI.
+    Updates the local JSON database via load/save_special_pokemon.
+    """
+    log.info(f"[scrape] Bắt đầu quét Pokemon Đặc biệt tại vùng: {current_map_slug}")
+    try:
+        # Locate the header text
+        header = page.locator("text='Pokemon Đặc Biệt'").first
+        if not header.is_visible(timeout=5000):
+            log.warning("[scrape] Không tìm thấy phần tử 'Pokemon Đặc Biệt' trên UI.")
+            return []
+            
+        # The container is usually the following sibling div
+        # Using XPath to navigate relative to the header
+        container = header.locator("xpath=following-sibling::div[1]")
+        
+        # Extract all <p> tags inside that container
+        p_elements = container.locator("p").all()
+        special_list = []
+        
+        for p in p_elements:
+            text = p.inner_text().strip()
+            if text:
+                # Format: "MegaAmpharos (Normal)" -> "MEGAAMPHAROS"
+                name_part = text.split("(")[0].strip().upper()
+                if name_part:
+                    special_list.append(name_part)
+        
+        if special_list:
+            log.info(f"[scrape] Đã tìm thấy {len(special_list)} Pokemon đặc biệt: {special_list}")
+            # Update the global registry
+            data = load_special_pokemon()
+            data[current_map_slug] = special_list
+            save_special_pokemon(data)
+        else:
+            log.warning("[scrape] Tìm thấy container nhưng không có thẻ <p> nào chứa tên Pokemon.")
+            
+        return special_list
+        
+    except Exception as e:
+        log.error(f"[scrape] Lỗi nghiêm trọng khi quét UI: {e}")
+        return []
 
 
 def _parse_hp_from_page(page: Page) -> tuple[int, int, int, int]:

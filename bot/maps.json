@@ -1,7 +1,20 @@
 {
   "Map Event": {
+    "name": "Sự kiện Chào Xuân 3",
     "unlocked": true,
     "url": "/map/event-chao-xuan-3",
+    "requirement": ""
+  },
+  "event-2-djoc-la": {
+    "name": "Sự kiện Độc Lạ",
+    "unlocked": true,
+    "url": "/map/event-2-djoc-la",
+    "requirement": ""
+  },
+  "event-cham-chi-2": {
+    "name": "Sự kiện Chăm Chỉ 2",
+    "unlocked": true,
+    "url": "/map/event-cham-chi-2",
     "requirement": ""
   },
   "Vùng Kanto": {

@@ -1,21 +1,39 @@
-"""
-utils.py – Shared utility helpers.
-
-Contains:
-    • random_delay()  – human-like sleep between UI interactions
-"""
-
 import io
+import os
+import json
 import time
 import random
 import logging
 import requests
 import threading
+from pathlib import Path
 from PIL import Image
 
 import config
 
 log = logging.getLogger(__name__)
+
+# Data storage for map-specific special Pokémon
+SPECIAL_PKM_FILE = os.path.join(os.path.dirname(__file__), "data", "special_pokemon.json")
+
+def load_special_pokemon():
+    """Load the map-specific special Pokémon list from JSON."""
+    if os.path.exists(SPECIAL_PKM_FILE):
+        try:
+            with open(SPECIAL_PKM_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            log.error(f"[data] Error loading special Pokémon file: {e}")
+    return {}
+
+def save_special_pokemon(data):
+    """Save the special Pokémon data to JSON."""
+    try:
+        os.makedirs(os.path.dirname(SPECIAL_PKM_FILE), exist_ok=True)
+        with open(SPECIAL_PKM_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        log.error(f"[data] Error saving special Pokémon file: {e}")
 
 
 def random_sleep(min_s: float, max_s: float) -> None:
@@ -195,30 +213,46 @@ def check_telegram_commands():
                     )
                     send_telegram_reply(status_text)
                 elif text == "/mapinfo":
-                    map_list_text = (
-                        "🗺️ <b>DANH SÁCH BẢN ĐỒ HIỆN CÓ:</b>\n\n"
-                        "🔹 <code>/map kanto</code> - Vùng Kanto\n"
-                        "🔹 <code>/map johto</code> - Vùng Johto\n"
-                        "🔹 <code>/map hoenn</code> - Vùng Hoenn\n"
-                        "🔹 <code>/map sinnoh</code> - Vùng Sinnoh\n"
-                        "🔹 <code>/map unova</code> - Vùng Unova\n"
-                        "🔹 <code>/map kalos</code> - Vùng Kalos\n"
-                        "🔹 <code>/map alola</code> - Vùng Alola\n"
-                        "🔹 <code>/map galar</code> - Vùng Galar\n"
-                        "🔹 <code>/map paldea</code> - Vùng Paldea\n\n"
-                        "💡 <i>Mẹo: Gõ đúng cú pháp trên để lệnh cho bot chuyển map ngay lập tức!</i>"
-                    )
-                    send_telegram_reply(map_list_text)
+                    event_maps = []
+                    regular_maps = []
+                    
+                    for slug, info in config.maps_data.items():
+                        # Use info['name'] if available, otherwise capitalize slug
+                        map_name = info.get("name") if isinstance(info, dict) else slug
+                        if not map_name:
+                            map_name = slug.replace("-", " ").title()
+
+                        entry = f"📍 <code>{slug}</code>: {map_name}"
+                        if "event" in slug.lower():
+                            event_maps.append(entry)
+                        else:
+                            regular_maps.append(entry)
+                    
+                    message = "🗺️ <b>DANH SÁCH BẢN ĐỒ KHẢ DỤNG</b> 🗺️\n\n"
+                    
+                    if event_maps:
+                        message += "🔥 <b>KHU VỰC SỰ KIỆN:</b>\n" + "\n".join(event_maps) + "\n\n"
+                    
+                    if regular_maps:
+                        message += "🌍 <b>BẢN ĐỒ THẾ GIỚI:</b>\n" + "\n".join(regular_maps) + "\n\n"
+                    
+                    message += "👉 <i>Dùng lệnh: /map [tên-map] để chuyển vùng!</i>"
+                    send_telegram_reply(message)
                 elif text.startswith("/map"):
                     parts = text.split(maxsplit=1)
                     if len(parts) >= 2:
                         region = parts[1].strip().lower()
-                        # Auto-prefix 'vung-' if missing for slug consistency
-                        slug = f"vung-{region}" if not region.startswith("vung-") else region
+                        if region.startswith("event-"):
+                            slug = region
+                        else:
+                            slug = f"vung-{region}" if not region.startswith("vung-") else region
                         config.BOT_STATE["change_map_to"] = slug
                         send_telegram_reply(f"🔄 <b>Đã nhận lệnh!</b> Đang chuẩn bị chuyển bot sang <code>{region.capitalize()}</code>...")
                     else:
                         send_telegram_reply("⚠️ <b>Sai cú pháp!</b> Vui lòng nhập tên vùng. VD: <code>/map kanto</code>, <code>/map hoenn</code>")
+                elif text == "/learn_map" or text == "/learn":
+                    config.BOT_STATE["trigger_learn_map"] = True
+                    send_telegram_reply("🧠 <b>Đang học lệnh!</b> Bot sẽ tiến hành quét danh sách Pokémon Đặc biệt tại vùng này ở vòng lặp tới...")
     except Exception:
         pass # Silence background network errors
 

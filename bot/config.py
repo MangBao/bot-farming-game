@@ -115,13 +115,7 @@ SPAM_ULTRA_BALL = os.environ.get("SPAM_ULTRA_BALL", "True").upper() == "TRUE"
 # True: Đánh đến chết để cày xu. False: Bỏ chạy ngay lập tức để tiết kiệm thời gian.
 AUTO_KILL_DUPLICATES = os.environ.get("AUTO_KILL_DUPLICATES", "False").upper() == "TRUE"
 
-# Danh sách Pokemon đặc biệt - Gặp là bắt bằng mọi giá
-SPECIAL_CATCH_LIST = [
-    "VICTINI", 
-    "CELEBI", 
-    "MEW",
-    # Sếp có thể thêm tên Pokemon khác vào đây...
-]
+# Danh sách Pokemon đặc biệt - Gặp là bắt bằng mọi giá (Đã chuyển sang JSON động qua lệnh /learn)
 
 # ---------------------------------------------------------------------------
 # Captcha selectors

@@ -29,10 +29,11 @@ from utils import (
     send_telegram_alert, 
     send_telegram_reply,
     start_telegram_listener,
-    is_special_variant
+    is_special_variant,
+    load_special_pokemon
 )
 from auth import login_and_navigate, auto_login, check_map_locked
-from scanner import scan_pokemon
+from scanner import scan_pokemon, scrape_special_pokemon_from_ui
 from combat import handle_encounter, flee
 
 log = logging.getLogger(__name__)
@@ -104,15 +105,31 @@ def run_bot(page: Page) -> None:
             break
 
         try:
+            # ── Learn Map Flag Check (Triggered via Telegram) ────────────────
+            if config.BOT_STATE.get("trigger_learn_map"):
+                log.info(f"[bot] Tiến hành học Pokémon đặc biệt từ UI tại {config.TARGET_MAP}...")
+                learned_list = scrape_special_pokemon_from_ui(page, config.TARGET_MAP)
+                config.BOT_STATE["trigger_learn_map"] = False
+                
+                if learned_list:
+                    learned_str = ", ".join(learned_list)
+                    send_telegram_reply(f"✅ <b>Đã học xong!</b>\n\n📌 <b>Hệ thống đã nhận diện các Pokémon đặc biệt tại {config.TARGET_MAP}:</b>\n<code>{learned_str}</code>")
+                else:
+                    send_telegram_reply("❌ <b>Học thất bại!</b> Không tìm thấy danh sách Pokémon Đặc biệt tại đây hoặc lỗi UI.")
+
             # ── Scan ─────────────────────────────────────────────────────────
             pokemon = scan_pokemon(page)
             if pokemon:
+                # Nạp danh sách đặc biệt động từ JSON
+                all_special_data = load_special_pokemon()
+                current_map_special_list = all_special_data.get(config.TARGET_MAP, [])
+                
                 # Lấy tên và Rank để kiểm tra điều kiện
                 pkm_name_upper = pokemon['name'].upper()
                 is_vip         = pokemon["rank"] in config.ALWAYS_CATCH_RANKS
                 is_new         = pokemon.get("is_new_pokedex", False)
                 is_special     = is_special_variant(pokemon["name"])
-                is_must_catch  = pkm_name_upper in config.SPECIAL_CATCH_LIST
+                is_must_catch  = pkm_name_upper in current_map_special_list
 
                 if is_must_catch or is_vip or is_new or is_special:
                     if is_must_catch:
