@@ -5,6 +5,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
+from playwright_stealth import stealth_sync
+
 # Load các biến môi trường từ file .env
 BASE_DIR = Path(__file__).parent.parent
 env_path = BASE_DIR / ".env"
@@ -33,6 +35,7 @@ def generate_auth_automated():
         )
         
         page = context.new_page()
+        stealth_sync(page)     # Ngụy trang trình duyệt
         
         print(f"🔗 [2/6] Đang mở trang đăng nhập: {LOGIN_URL}")
         page.goto(LOGIN_URL, wait_until="domcontentloaded")
@@ -62,15 +65,13 @@ def generate_auth_automated():
             print("⌛ [5/6] Đang chờ điều hướng vào game... (Chỉnh timeout 60s để bạn kịp giải Captcha nếu có)")
             
             # Chờ đợi URL không còn chứa 'login' và trang web thực tế đã load
-            # Ở đây tôi dùng wait_for_url với một function predicate hoặc timeout dài
             try:
                 # Nếu trang yêu cầu Cloudflare, nó sẽ bị kẹt ở đây. 
                 # Timeout 60s đủ dài để người dùng can thiệp click tay vào box Cloudflare nếu nó hiện ra.
                 page.wait_for_url(lambda url: "login" not in url.lower() and GAME_HOST in url.lower(), timeout=60_000)
                 
-                # Check thêm sự tồn tại của một element trong game để chắc chắn (ví dụ thanh menu, hoặc avatar)
-                # Dùng selector chung chung thường thấy trong game RPG
-                page.wait_for_load_state("networkidle", timeout=15_000)
+                # Check thêm sự tồn tại của nút 'Tìm kiếm' để chắc chắn đã vào game
+                page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
                 
                 print("✅ Đăng nhập thành công! Đã vào giao diện game.")
             except Exception:

@@ -38,7 +38,9 @@ def auto_login(page: Page) -> bool:
             login_btn = page.locator("button[type='submit'], input[type='submit']").first
         
         login_btn.click()
-        page.wait_for_load_state("networkidle", timeout=15000)
+        # Chờ UI ổn định thay vì networkidle
+        page.wait_for_load_state("domcontentloaded")
+        page.wait_for_timeout(3000) 
         
         if email_field.is_visible(timeout=3000):
             log.error("[auto_login] Vẫn còn ở trang đăng nhập. Thất bại.")
@@ -46,7 +48,7 @@ def auto_login(page: Page) -> bool:
             
         log.info(f"[auto_login] Đăng nhập thành công, chuyển lẹ đến {config.MAP_URL}")
         page.goto(config.MAP_URL, wait_until="domcontentloaded")
-        page.wait_for_load_state("networkidle")
+        page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
         
         return True
     except PlaywrightTimeoutError:
@@ -97,7 +99,8 @@ def login_and_navigate(page: Page, skip_login_fields: bool = False) -> None:
         log.info("[auth] ✨ Đang bỏ qua bước đăng nhập... Đang nạp session.")
         log.info("[auth] 🚜 Đang chuyển đến map ngay lập tức: %s", config.MAP_URL)
         page.goto(config.MAP_URL, wait_until="domcontentloaded")
-        page.wait_for_load_state("networkidle", timeout=30_000)
+        # Thay thế networkidle bằng việc đợi nút 'Tìm kiếm' xuất hiện
+        page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
         
         # Kiểm tra xem có bị đá ra trang login không
         current_url = page.url.lower()
@@ -142,7 +145,8 @@ def login_and_navigate(page: Page, skip_login_fields: bool = False) -> None:
         login_button = page.get_by_role("button", name="Đăng Nhập")
         login_button.wait_for(state="visible", timeout=10_000)
         login_button.click()
-        page.wait_for_load_state("networkidle", timeout=30_000)
+        page.wait_for_load_state("domcontentloaded", timeout=30_000)
+        page.wait_for_timeout(2000)
         random_delay()
     except Exception as e:
         log.error(f"[auth] Lỗi trong quá trình đăng nhập: {e}")
@@ -159,7 +163,8 @@ def login_and_navigate(page: Page, skip_login_fields: bool = False) -> None:
     # ── Navigate to map ──────────────────────────────────────────────────────
     log.info("[auth] Navigating to map: %s", config.MAP_URL)
     page.goto(config.MAP_URL, wait_until="domcontentloaded")
-    page.wait_for_load_state("networkidle", timeout=30_000)
+    # Đợi nút Tìm kiếm để đảm bảo đã vào game thực sự
+    page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
     
     # ── Map Lock Security Check ──────────────────────────────────────────────
     if check_map_locked(page):
