@@ -5,7 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 
-from playwright_stealth import stealth_sync
+from playwright_stealth import stealth
 
 # Load các biến môi trường từ file .env
 BASE_DIR = Path(__file__).parent.parent
@@ -35,7 +35,7 @@ def generate_auth_automated():
         )
         
         page = context.new_page()
-        stealth_sync(page)     # Ngụy trang trình duyệt
+        stealth(page)     # Ngụy trang trình duyệt
         
         print(f"🔗 [2/6] Đang mở trang đăng nhập: {LOGIN_URL}")
         page.goto(LOGIN_URL, wait_until="domcontentloaded")
