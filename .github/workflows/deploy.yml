@@ -18,7 +18,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             # 1. Di chuyển vào thư mục code
-            cd /home/ubuntu/pkm-bot
+            cd /home/ubuntu/dev-space/bot-farming-game
 
             # 2. Kéo code mới nhất từ Github về (bỏ qua các thay đổi local rác nếu có)
             git reset --hard
