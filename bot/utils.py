@@ -117,14 +117,22 @@ def send_telegram_notification(
     success = False
     if image_url:
         try:
-            # A. Download Pokemon image (Fake User-Agent bypass)
+            # A. Download Pokemon image with Retry logic (Fake User-Agent bypass)
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Referer": f"{config.BASE_URL}/"
             }
-            pkm_response = requests.get(image_url, headers=headers, timeout=10)
             
-            if pkm_response.status_code == 200:
+            pkm_response = None
+            for attempt in range(3):
+                try:
+                    pkm_response = requests.get(image_url, headers=headers, timeout=10)
+                    if pkm_response.status_code == 200:
+                        break
+                except Exception:
+                    time.sleep(1)
+            
+            if pkm_response and pkm_response.status_code == 200:
                 pkm_img = Image.open(io.BytesIO(pkm_response.content)).convert("RGBA")
                 
                 # B. Create a Banner Canvas (500x250, Dark Mode friendly #2B3136)
@@ -141,16 +149,16 @@ def send_telegram_notification(
                 bg.save(output_bytes, format="PNG")
                 output_bytes.seek(0)
 
-                # E. Send as Photo to Telegram
+                # E. Send as Photo to Telegram (Increased timeout for reliable upload)
                 url = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}/sendPhoto"
                 data = {"chat_id": config.TELEGRAM_CHAT_ID, "caption": caption, "parse_mode": "HTML"}
                 files = {"photo": ("pokemon_banner.png", output_bytes)}
                 
-                res = requests.post(url, data=data, files=files, timeout=3)
+                res = requests.post(url, data=data, files=files, timeout=15)
                 if res.status_code == 200:
                     success = True
             else:
-                log.warning(f"[telegram] Could not download PKM image (HTTP {pkm_response.status_code})")
+                log.warning(f"[telegram] Không thể tải ảnh PKM sau 3 lần thử (URL: {image_url})")
         except Exception as e:
             log.error(f"[telegram] Image Banner creation/upload failed: {e}")
 
