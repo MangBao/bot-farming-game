@@ -226,7 +226,7 @@ def main() -> None:
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
-            headless=False,           # set True to run silently
+            headless=True,           # set True to run silently
             slow_mo=300,              # slight base delay for UI stability
             args=["--start-maximized"],
         )
