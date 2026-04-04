@@ -19,6 +19,7 @@ Import map (no circular dependencies):
 import time
 import logging
 import sys
+import os
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
 
 import config
@@ -224,23 +225,34 @@ def run_bot(page: Page) -> None:
 def main() -> None:
     log.info("[main] Launching Chromium...")
 
+    auth_path = "auth.json"
+    use_session = os.path.exists(auth_path)
+    
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             headless=True,           # set True to run silently
             slow_mo=300,              # slight base delay for UI stability
             args=["--start-maximized"],
         )
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            viewport={'width': 1920, 'height': 1080}
-        )
+        
+        # 1. Khởi tạo context với session nếu có auth.json
+        context_args = {
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "viewport": {'width': 1920, 'height': 1080}
+        }
+        if use_session:
+            log.info(f"[main] 📁 Phát hiện file {auth_path} - Đang nạp phiên đăng nhập (Cookie/Session)...")
+            context_args["storage_state"] = auth_path
+            
+        context = browser.new_context(**context_args)
         page    = context.new_page()
 
         try:
             log.info("[main] Bắt đầu luồng lắng nghe Telegram ngầm...")
             start_telegram_listener()
             
-            login_and_navigate(page)
+            # 2. Thực hiện đăng nhập hoặc nhảy thẳng vào map
+            login_and_navigate(page, skip_login_fields=use_session)
             run_bot(page)             # ← enters the infinite loop
 
         except Exception as exc:      # pylint: disable=broad-except

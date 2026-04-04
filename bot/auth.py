@@ -86,11 +86,29 @@ def check_map_locked(page: Page) -> bool:
     
     return False
 
-def login_and_navigate(page: Page) -> None:
+def login_and_navigate(page: Page, skip_login_fields: bool = False) -> None:
     """
     Navigate to the login page, fill credentials, submit, then go to the Johto map.
     Raises PlaywrightTimeoutError if any step times out.
     """
+    
+    # ── Handle Existing Session ──────────────────────────────────────────────
+    if skip_login_fields:
+        log.info("[auth] ✨ Đang bỏ qua bước đăng nhập... Đang nạp session.")
+        log.info("[auth] 🚜 Đang chuyển đến map ngay lập tức: %s", config.MAP_URL)
+        page.goto(config.MAP_URL, wait_until="domcontentloaded")
+        page.wait_for_load_state("networkidle", timeout=30_000)
+        
+        # Kiểm tra xem có bị đá ra trang login không
+        current_url = page.url.lower()
+        if "login" in current_url:
+            log.error("[auth] ⚠️ Lỗi SESSION HẾT HẠN! auth.json không còn hiệu lực.")
+            log.error("[auth] Hãy chạy tools/generate_auth.py ở máy local để tạo lại file mới.")
+            sys.exit(1)
+            
+        log.info("[auth] Đăng nhập bằng session thành công!")
+        return
+
     # ── Open login page ──────────────────────────────────────────────────────
     log.info("[auth] Navigating to login page: %s", config.LOGIN_URL)
     page.goto(config.LOGIN_URL, wait_until="domcontentloaded")
