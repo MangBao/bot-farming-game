@@ -21,7 +21,6 @@ import logging
 import sys
 import os
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
-from playwright_stealth import stealth
 
 import config
 from utils import (
@@ -247,7 +246,7 @@ def main() -> None:
             
         context = browser.new_context(**context_args)
         page    = context.new_page()
-        stealth(page)
+        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
 
         try:
             log.info("[main] Bắt đầu luồng lắng nghe Telegram ngầm...")
