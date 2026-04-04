@@ -22,3 +22,6 @@ dom_dump.html
 .idea/
 .cursorignore
 .ruff_cache/
+
+# Bỏ qua file chứa phiên đăng nhập (Bảo mật)
+auth.json
