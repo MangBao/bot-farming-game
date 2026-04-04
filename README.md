@@ -1,7 +1,7 @@
 <div align="center">
   <br />
   <h1>🎮 Automated RPG Farming Bot</h1>
-  <p><strong>Hệ thống tự động hóa Playwright siêu việt dành cho Web-based RPG</strong></p>
+  <p><strong>Hệ thống tự động hóa Playwright siêu việt dành cho Web-based RPG (VNPet)</strong></p>
 
   <p>
     <img alt="Python Version" src="https://img.shields.io/badge/python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white" />
@@ -10,7 +10,7 @@
     <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=for-the-badge" />
   </p>
   <p>
-    <em>Quét hình ảnh, Giải Captcha, Tính toán Damage & Đổ Loot về Telegram theo thời gian thực.</em>
+    <em>Quét hình ảnh, Giải Captcha, Tự động học mục tiêu & Đổ Loot về Telegram kèm Banner High-Fidelity.</em>
   </p>
 </div>
 
@@ -18,82 +18,77 @@
 
 ## 📖 Giới thiệu
 
-**Automated RPG Farming Bot** là hệ thống tự động hóa thao tác trình duyệt bằng **Headless Chrome (Playwright)**. Dự án sinh ra để thay thế con người thực hiện các nhiệm vụ phiêu lưu, bắt thú, cày cuốc tài nguyên lặp đi lặp lại hàng giờ liền trong môi trường Web-based RPG. Điểm mạnh của bot nằm ở kiến trúc module hóa gọn gàng, linh hoạt tùy biến và khả năng xử lý tình huống cực kỳ thông minh.
+**Automated RPG Farming Bot** là hệ thống tự động hóa thao tác trình duyệt bằng **Headless Chrome (Playwright)**. Dự án được thiết kế chuyên biệt để thực hiện các nhiệm vụ phiêu lưu, bắt thú và cày tài nguyên 24/7. Bot sở hữu khả năng tự động học hỏi danh sách quái hiếm từ giao diện game, xử lý lỗi thông minh và cho phép điều khiển từ xa qua Telegram.
 
 ---
 
 ## ✨ Tính năng nổi bật
 
-### 1. 🔍 Nhận diện DOM & Auto Farm 24/7
-- Quét liên tục bản đồ, tự động ấn nút "Tìm kiếm".
-- Bypass màn hình tải trang với các khối `try/except` và timeout linh động.
+### 1. 🔍 Nhận diện & Auto Farm Thông Minh
+- **Quét 24/7:** Tự động ấn nút "Tìm kiếm", xử lý các tình huống kẹt trang hoặc lỗi mạng.
+- **Phân tách mục tiêu:** Tự động nhận diện Pokemon VIP (Rank S trở lên), Pokemon chưa có trong Pokedex (`NEW -`), và các biến dị đặc biệt (Shiny/Rainbow).
+- **Hệ thống Map đa dạng:** Hỗ trợ đầy đủ các vùng đất từ Kanto đến Paldea và các **Khu vực Sự kiện** đặc biệt.
 
-### 2. 🧮 Auto Giải Math Captcha (Anti-Auto Click)
-- Quét toàn dải RegExp khi Pop-up "*Kiểm tra thao tác*" xuất hiện.
-- Tự động bóc tách phép tính (Cộng, Trừ, Nhân, Chia), tính toán kết quả và điền số ẩn danh như người thật chỉ trong chớp mắt.
+### 2. 🧠 Chế độ "Học Tập" Động (`/learn`)
+- **Scrape mục tiêu hiếm:** Bot có khả năng quét giao diện "Pokemon Đặc Biệt" của map hiện tại và lưu vào cơ sở dữ liệu JSON (`special_pokemon.json`).
+- **Ưu tiên bắt tuyệt đối:** Sau khi học, mọi Pokemon trong danh sách đặc biệt sẽ được ưu tiên bắt bằng mọi giá (Must Catch), bất kể Rank hay trạng thái Pokedex.
 
-### 3. ⚔️ Dynamic Damage Tracking & Máu An Toàn
-- **Chốt chặn an toàn (Safe HP Margin):** Bot tự động chạy ngay thoát hiểm nếu máu team mình rơi xuống dưới **15%**.
-- **Đọc log combat:** Bóc bóc sát thương tạo thành biến số động để ước lượng đòn đánh kết liễu (`Max Hit + Buffer`).
-- Liên tục bào máu mục tiêu mà **không bao giờ đánh chết chúng**, tối đa tỉ lệ thu phục.
+### 3. ⚔️ Trí Tuệ Chiến Đấu & Cày Xu
+- **Thoát kẹt Softlock:** Cơ chế Flee mạnh mẽ, tự động `Hard Reset` (Tải lại trang) nếu bị kẹt UI hoặc Pokemon phe mình bị kiệt sức.
+- **Smart Damage Tracking:** Tự động tính toán Damage để ép máu mục tiêu xuống mức tối thiểu (Safe HP Margin) trước khi ném bóng, tối ưu tỷ lệ bắt.
+- **Tùy chỉnh hành vi:**
+    - `AUTO_KILL_DUPLICATES`: Chọn giữa việc "Tiêu diệt" để cày xu hoặc "Bỏ chạy" để tiết kiệm thời gian khi gặp quái trùng.
+    - `SPAM_ULTRA_BALL`: Tùy chỉnh việc sử dụng Ultra Ball cho quái thường để tối ưu tài nguyên.
 
-### 4. 🎯 Bộ Lọc Bắt Đồ VIP (Smart Rarity Filter)
-- Né rác: Lọc độ hiếm mục tiêu để bỏ chạy hoặc tiếp tục, tối ưu tỷ lệ ném bóng.
-- **Pokedex Override:** Tự bắt mọi quái vật gắn tag "*Chưa có trong Pokedex*" bất kể cấp độ.
-- Hệ thống Fallback PokéBall chọn thông minh bóng tối ưu chi phí tỉ lệ.
+### 4. 🧮 Auto Giải Math Captcha
+- Tự động phát hiện và giải các phép tính (Cộng, Trừ, Nhân, Chia) ngay khi Pop-up kiểm tra xuất hiện, đảm bảo bot vận hành liên tục không gián đoạn.
 
-### 5. 📱 Telegram Loot Logger
-- Thông báo chiến lợi phẩm cao cấp đập thẳng vào điện thoại qua Telegram API.
-- Báo cáo số HP, Rank và trạng thái bắt gọn gàng, kèm biểu cảm.
+### 5. 📱 Telegram Remote Control & Logging
+- **Banner High-Fidelity:** Thông báo chiến lợi phẩm kèm ảnh banner 500x250 được render chuyên nghiệp (sử dụng Pillow).
+- **Cơ chế Retry siêu cấp:** Tự động thử lại 3 lần nếu việc tải ảnh từ game bị lỗi, tăng timeout upload lên 15s để đảm bảo thông báo luôn được gửi đi.
+- **Hệ thống lệnh điều khiển từ xa:**
+    - `/status`: Kiểm tra tình trạng sức khỏe, số lượng quái đã gặp/bắt và HP hiện tại.
+    - `/mapinfo`: Hiển thị danh sách các Vùng thường và Vùng sự kiện đang có.
+    - `/map [slug]`: Ra lệnh cho bot tự động chuyển vùng đất ngay tức thì.
+    - `/learn`: Lệnh cho bot tự quét và học danh sách Pokemon đặc biệt tại Map hiện tại.
+    - `/pause` / `/resume`: Tạm dừng hoặc tiếp tục hành trình.
 
 ---
 
 ## 🚀 Cài đặt & Khởi chạy
 
-> Đảm bảo máy tính của bạn đã cài đặt **Python 3.10+**.
-
 ### Bước 1. Môi trường Ảo (Virtual Environment)
-Tài nguyên không ảnh hưởng tới các script khác của hệ thống:
 ```bash
 python -m venv venv
-
-# Kích hoạt trên Windows
-venv\Scripts\activate
-# Kích hoạt trên macOS/Linux
-source venv/bin/activate
+venv\Scripts\activate  # Windows
+source venv/bin/activate  # macOS/Linux
 ```
 
 ### Bước 2. Cài đặt Thư Viện
 ```bash
 pip install -r requirements.txt
-pip install playwright requests python-dotenv
-
-# Tải lõi trình duyệt Chrome headless
 playwright install chromium
 ```
 
 ### Bước 3. Biến Môi Trường (.env)
-Sao chép cấu hình mẫu và nhập chính xác tài khoản bằng bất kỳ định dạng Text Code Editor nào bạn có, chẳng hạn VSCode hoặc Notepad++:
-```bash
-cp .env.example .env
-```
-
-<details>
-<summary>👀 Giao diện mẫu file .env (Bấm để xem)</summary>
+Tạo file `.env` từ `.env.example` và cấu hình:
 
 ```env
-GAME_EMAIL=your_email_here
-GAME_PASSWORD=your_password_here
-GAME_HOST=target-website.com
+GAME_EMAIL=your_email@gmail.com
+GAME_PASSWORD=your_password
 GAME_TARGET_MAP="Vùng Johto"
+GAME_HOST=vnpet.games
+
+# Toggles hành vi
+AUTO_KILL_DUPLICATES=False
+SPAM_ULTRA_BALL=True
+
+# Telegram API
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
 ```
-</details>
 
-### Bước 4. Thử Nghiệm
-
-Mở Terminal và trỏ lệnh về tệp thực thi chính:
+### Bước 4. Chạy Bot
 ```bash
 python bot/main.py
 ```
