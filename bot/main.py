@@ -22,6 +22,7 @@ import sys
 import os
 from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeoutError
 
+import subprocess
 import config
 from utils import (
     random_delay, 
@@ -227,11 +228,40 @@ def run_bot(page: Page) -> None:
 # ===========================================================================
 
 def main() -> None:
-    log.info("[main] Launching Chromium...")
-
     auth_path = "auth.json"
-    use_session = os.path.exists(auth_path)
     
+    # ── Step 0: Đảm bảo môi trường sạch ──────────────────────────────────────
+    if os.path.exists(auth_path):
+        log.info(f"[main] 🧹 Đang dọn dẹp file {auth_path} cũ...")
+        try:
+            os.remove(auth_path)
+        except Exception as e:
+            log.error(f"[main] Không thể xóa {auth_path}: {e}")
+
+    # ── Step 1: Tự động tạo session mới ─────────────────────────────────────
+    gen_script = os.path.join("tools", "generate_auth.py")
+    log.info(f"[main] 🚀 Đang khởi chạy script tạo Auth: {gen_script}...")
+    log.info("[main] Chú ý: Hãy hoàn tất đăng nhập trong cửa sổ trình duyệt vừa hiện ra.")
+    
+    try:
+        # Sử dụng sys.executable để gọi đúng python hiện tại
+        # Cửa sổ trình duyệt của script generate_auth.py sẽ hiện lên ở đây
+        subprocess.run([sys.executable, gen_script], check=True)
+    except subprocess.CalledProcessError:
+        log.error("[main] ❌ Script generate_auth.py kết thúc với lỗi. Dừng bot.")
+        return
+    except Exception as e:
+        log.error(f"[main] ❌ Lỗi không mong đợi khi chạy script tạo session: {e}")
+        return
+
+    # Kiểm tra file auth.json đã được tạo thành công chưa
+    if not os.path.exists(auth_path):
+        log.error(f"[main] ❌ Lỗi: File {auth_path} không được tạo. Bot không có phiên để chạy.")
+        return
+
+    log.info("[main] ✨ Khởi tạo session thành công. Bắt đầu vào game...")
+    
+    # ── Step 2: Khởi chạy Bot chính ──────────────────────────────────────────
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             headless=True,           # set True to run silently
@@ -239,15 +269,12 @@ def main() -> None:
             args=["--start-maximized"],
         )
         
-        # 1. Khởi tạo context với session nếu có auth.json
         context_args = {
             "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "viewport": {'width': 1920, 'height': 1080}
+            "viewport": {'width': 1920, 'height': 1080},
+            "storage_state": auth_path
         }
-        if use_session:
-            log.info(f"[main] 📁 Phát hiện file {auth_path} - Đang nạp phiên đăng nhập (Cookie/Session)...")
-            context_args["storage_state"] = auth_path
-            
+        
         context = browser.new_context(**context_args)
         page    = context.new_page()
         page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
@@ -256,8 +283,8 @@ def main() -> None:
             log.info("[main] Bắt đầu luồng lắng nghe Telegram ngầm...")
             start_telegram_listener()
             
-            # 2. Thực hiện đăng nhập hoặc nhảy thẳng vào map
-            login_and_navigate(page, skip_login_fields=use_session)
+            # 2. Nhảy thẳng vào map (vì session luôn được khởi tạo mới ở bước trên)
+            login_and_navigate(page, skip_login_fields=True)
             run_bot(page)             # ← enters the infinite loop
 
         except Exception as exc:      # pylint: disable=broad-except
