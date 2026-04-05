@@ -86,6 +86,9 @@ def run_bot(page: Page) -> None:
                 page.wait_for_load_state("networkidle", timeout=20_000)
                 log.info(f"[bot] Chuyển map thành công: {new_map_slug}")
                 
+                # Cập nhật TARGET_MAP để đồng bộ hệ thống (dùng cho lệnh /learn và kiểm tra pet đặc biệt)
+                config.TARGET_MAP = new_map_slug
+                
                 # Check if the map we just jumped to is actually locked
                 if check_map_locked(page):
                     log.error("[bot] Lệnh chuyển map thất bại do Map bị khóa.")
@@ -121,9 +124,10 @@ def run_bot(page: Page) -> None:
             # ── Scan ─────────────────────────────────────────────────────────
             pokemon = scan_pokemon(page)
             if pokemon:
-                # Nạp danh sách đặc biệt động từ JSON
+                # Nạp danh sách đặc biệt động từ JSON với cấu trúc 'maps'
                 all_special_data = load_special_pokemon()
-                current_map_special_list = all_special_data.get(config.TARGET_MAP, [])
+                # Kiểm tra pet đặc biệt trong đúng map đang đứng
+                current_map_special_list = all_special_data.get("maps", {}).get(config.TARGET_MAP, [])
                 
                 # Lấy tên và Rank để kiểm tra điều kiện
                 pkm_name_upper = pokemon['name'].upper()

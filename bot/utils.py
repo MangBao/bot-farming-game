@@ -17,14 +17,23 @@ log = logging.getLogger(__name__)
 SPECIAL_PKM_FILE = os.path.join(os.path.dirname(__file__), "data", "special_pokemon.json")
 
 def load_special_pokemon():
-    """Load the map-specific special Pokémon list from JSON."""
+    """Load the special Pokémon data with 'maps' structure."""
     if os.path.exists(SPECIAL_PKM_FILE):
         try:
             with open(SPECIAL_PKM_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                
+                # Migration: If it's a flat dict (old format), wrap it in 'maps'
+                if isinstance(data, dict) and "maps" not in data:
+                    log.info("[data] Migrating old special_pokemon.json to new structure...")
+                    data = {"maps": data}
+                elif not isinstance(data, dict):
+                    data = {"maps": {}}
+                
+                return data
         except Exception as e:
             log.error(f"[data] Error loading special Pokémon file: {e}")
-    return {}
+    return {"maps": {}}
 
 def save_special_pokemon(data):
     """Save the special Pokémon data to JSON."""
@@ -225,12 +234,18 @@ def check_telegram_commands():
                     regular_maps = []
                     
                     for slug, info in config.maps_data.items():
-                        # Use info['name'] if available, otherwise capitalize slug
-                        map_name = info.get("name") if isinstance(info, dict) else slug
+                        # Lấy tên map từ file JSON, nếu không có thì format từ slug
+                        map_name = ""
+                        if isinstance(info, dict):
+                            map_name = info.get("name", "")
+                        
                         if not map_name:
                             map_name = slug.replace("-", " ").title()
 
-                        entry = f"📍 <code>{slug}</code>: {map_name}"
+                        # Format theo yêu cầu: 📍 [Tên Map]: `id_map`
+                        # <code> giúp Telegram tự động copy khi chạm vào trên mobile
+                        entry = f"📍 {map_name}: <code>{slug}</code>"
+                        
                         if "event" in slug.lower():
                             event_maps.append(entry)
                         else:

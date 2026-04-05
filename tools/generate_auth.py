@@ -62,24 +62,21 @@ def generate_auth_automated():
             
             print("⌛ [5/6] Đang chờ điều hướng vào game... (Chỉnh timeout 60s để bạn kịp giải Captcha nếu có)")
             
-            # Chờ đợi URL không còn chứa 'login' và trang web thực tế đã load
+            # Chờ đợi trình duyệt chuyển hướng vào map (khu vực trò chơi)
             try:
                 # Nếu trang yêu cầu Cloudflare, nó sẽ bị kẹt ở đây. 
                 # Timeout 60s đủ dài để người dùng can thiệp click tay vào box Cloudflare nếu nó hiện ra.
-                page.wait_for_url(lambda url: "login" not in url.lower() and GAME_HOST in url.lower(), timeout=60_000)
+                page.wait_for_url("**/map/**", timeout=60_000)
                 
-                # Check thêm sự tồn tại của nút 'Tìm kiếm' để chắc chắn đã vào game
+                # Check thêm sự tồn tại của nút 'Tìm kiếm' để chắc chắn đã vào game hoàn toàn
                 page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
                 
                 print("✅ Đăng nhập thành công! Đã vào giao diện game.")
             except Exception:
-                # Nếu timeout mà vẫn ở trang login, có thể là do login sai hoặc bị kẹt Captcha
-                if "login" in page.url.lower():
-                    print("❌ Lỗi: Không thể vào game sau 60 giây. Có thể bạn cần giải Captcha thủ công hoặc sai mật khẩu.")
-                    print(f"URL hiện tại: {page.url}")
-                    return
-                else:
-                    print(f"⚠️ Cảnh báo: URL hiện tại là {page.url}, tiếp tục lưu session...")
+                # Nếu timeout mà vẫn chưa vào được map
+                print("❌ Đăng nhập thất bại hoặc bị kẹt màn hình chờ (không vào được URL map).")
+                print(f"URL hiện tại: {page.url}")
+                return
 
             print(f"💾 [6/6] Đang lưu phiên đăng nhập vào file: {auth_path}")
             context.storage_state(path=str(auth_path))

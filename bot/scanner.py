@@ -48,9 +48,11 @@ def scrape_special_pokemon_from_ui(page: Page, current_map_slug: str) -> List[st
         
         if special_list:
             log.info(f"[scrape] Đã tìm thấy {len(special_list)} Pokemon đặc biệt: {special_list}")
-            # Update the global registry
+            # Update the global registry safely inside 'maps' key
             data = load_special_pokemon()
-            data[current_map_slug] = special_list
+            if "maps" not in data:
+                data["maps"] = {}
+            data["maps"][current_map_slug] = special_list
             save_special_pokemon(data)
         else:
             log.warning("[scrape] Tìm thấy container nhưng không có thẻ <p> nào chứa tên Pokemon.")

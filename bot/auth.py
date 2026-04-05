@@ -48,8 +48,15 @@ def auto_login(page: Page) -> bool:
             
         log.info(f"[auto_login] Đăng nhập thành công, chuyển lẹ đến {config.MAP_URL}")
         page.goto(config.MAP_URL, wait_until="domcontentloaded")
+        
+        # Kiểm tra nút 'Tải lại trang' nếu game bị lỗi
+        if page.get_by_role("button", name="Tải lại trang").is_visible(timeout=2000) or "Đã xảy ra lỗi" in page.content():
+            log.warning("[auth] Phát hiện lỗi trang. Đang thực hiện reload...")
+            page.reload()
+            page.wait_for_load_state("domcontentloaded")
+
         try:
-            page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
+            page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=60_000)
         except PlaywrightTimeoutError as e:
             log.error("[auth] Timeout khi đợi nút Tìm kiếm tại map. Đang chụp ảnh màn hình debug...")
             page.screenshot(path="error_map_screen.png", full_page=True)
@@ -104,9 +111,16 @@ def login_and_navigate(page: Page, skip_login_fields: bool = False) -> None:
         log.info("[auth] ✨ Đang bỏ qua bước đăng nhập... Đang nạp session.")
         log.info("[auth] 🚜 Đang chuyển đến map ngay lập tức: %s", config.MAP_URL)
         page.goto(config.MAP_URL, wait_until="domcontentloaded")
+        
+        # Kiểm tra nút 'Tải lại trang' nếu game bị lỗi
+        if page.get_by_role("button", name="Tải lại trang").is_visible(timeout=3000) or "Đã xảy ra lỗi" in page.content():
+            log.warning("[auth] Phát hiện lỗi trang hoặc nút Tải lại. Đang thực hiện reload...")
+            page.reload()
+            page.wait_for_load_state("domcontentloaded")
+
         # Thay thế networkidle bằng việc đợi nút 'Tìm kiếm' xuất hiện
         try:
-            page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
+            page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=60_000)
         except PlaywrightTimeoutError as e:
             log.error("[auth] [Session] Timeout khi đợi nút Tìm kiếm. Đang chụp ảnh màn hình debug...")
             page.screenshot(path="error_map_screen.png", full_page=True)
@@ -173,9 +187,16 @@ def login_and_navigate(page: Page, skip_login_fields: bool = False) -> None:
     # ── Navigate to map ──────────────────────────────────────────────────────
     log.info("[auth] Navigating to map: %s", config.MAP_URL)
     page.goto(config.MAP_URL, wait_until="domcontentloaded")
+
+    # Kiểm tra nút 'Tải lại trang' nếu game bị lỗi
+    if page.get_by_role("button", name="Tải lại trang").is_visible(timeout=2000) or "Đã xảy ra lỗi" in page.content():
+        log.warning("[auth] Phát hiện lỗi trang. Đang thực hiện reload...")
+        page.reload()
+        page.wait_for_load_state("domcontentloaded")
+
     # Đợi nút Tìm kiếm để đảm bảo đã vào game thực sự
     try:
-        page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
+        page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=60_000)
     except PlaywrightTimeoutError as e:
         log.error("[auth] [Login] Timeout khi đợi nút Tìm kiếm. Đang chụp ảnh màn hình debug...")
         page.screenshot(path="error_map_screen.png", full_page=True)
