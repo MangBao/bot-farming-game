@@ -1,7 +1,7 @@
 <div align="center">
   <br />
   <h1>🎮 Automated RPG Farming Bot</h1>
-  <p><strong>Hệ thống tự động hóa Playwright siêu việt dành cho Web-based RPG (VNPet)</strong></p>
+  <p><strong>Hệ thống tự động hóa Playwright siêu việt dành cho Web-based RPG (Pokemon Go)</strong></p>
 
   <p>
     <img alt="Python Version" src="https://img.shields.io/badge/python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white" />
