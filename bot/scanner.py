@@ -17,6 +17,83 @@ from captcha import handle_math_captcha
 
 log = logging.getLogger(__name__)
 
+def scrape_player_status(page: Page) -> dict:
+    """Scrape map progress and total searches from the map page."""
+    log.info("[scrape] Đang lấy thông tin nhân vật từ Map...")
+    results = {
+        "map_progress": "Unknown",
+        "total_searches": "Unknown",
+        "current_map_name": "Unknown"
+    }
+    try:
+        page_text = page.locator("body").inner_text()
+        
+        # 1. Map Progress: 'Tiến độ mở map tiếp theo: 2210/5000'
+        match_progress = re.search(r"Tiến độ mở map tiếp theo:?\s*(\d+\s*/\s*\d+)", page_text)
+        if match_progress:
+            results["map_progress"] = match_progress.group(1).replace(" ", "")
+            
+        # 2. Total Searches: 'Tổng lượt tìm: 2210/650'
+        match_total = re.search(r"Tổng lượt tìm:?\s*([\d/]+)", page_text)
+        if match_total:
+            results["total_searches"] = match_total.group(1).strip()
+
+        # 3. Current map name from UI
+        # Try finding elements that look like a location header
+        for selector in ["h1", ".text-xl", ".font-bold", "h2"]:
+            loc = page.locator(selector).filter(has_text="Vùng").first
+            if loc.is_visible(timeout=500):
+                results["current_map_name"] = loc.inner_text().strip()
+                break
+            
+    except Exception as e:
+        log.error(f"[scrape] Lỗi khi lấy status: {e}")
+        
+    return results
+
+def scrape_inventory(page: Page) -> dict:
+    """Navigate to items page and scrape ball counts."""
+    log.info("[scrape] Đang truy cập kho đồ (https://vnpet.games/items)...")
+    balls = {
+        "Pokeball": 0,
+        "Great Ball": 0,
+        "Ultra Ball": 0,
+        "Master Ball": 0
+    }
+    
+    original_url = page.url
+    try:
+        # Navigate to items page
+        page.goto(f"{config.BASE_URL}/items", wait_until="domcontentloaded")
+        page.wait_for_timeout(2000)
+        
+        inv_text = page.locator("body").inner_text()
+        
+        for ball_name in balls.keys():
+            # Format: 'Pokeball x 123' or 'Pokeball: 123'
+            pattern = rf"{re.escape(ball_name)}\s*[x:]?\s*(\d+)"
+            match = re.search(pattern, inv_text, re.IGNORECASE)
+            if match:
+                balls[ball_name] = int(match.group(1))
+            else:
+                # Alt: Item count might be in a different element sibling
+                loc = page.get_by_text(ball_name, exact=True).first
+                if loc.is_visible(timeout=500):
+                    parent_text = loc.locator("xpath=..").inner_text()
+                    m = re.search(r"(\d+)", parent_text.replace(ball_name, ""))
+                    if m:
+                        balls[ball_name] = int(m.group(1))
+                        
+    except Exception as e:
+        log.error(f"[scrape] Lỗi khi quét kho đồ: {e}")
+    finally:
+        log.info(f"[scrape] Quay lại vị trí cũ: {original_url}")
+        page.goto(original_url, wait_until="domcontentloaded")
+        page.wait_for_load_state("networkidle", timeout=10000)
+        
+    return balls
+
+
 def scrape_special_pokemon_from_ui(page: Page, current_map_slug: str) -> List[str]:
     """
     Scrape 'Pokemon Đặc Biệt' names from the current map's UI.

@@ -35,7 +35,7 @@ from utils import (
     load_special_pokemon
 )
 from auth import login_and_navigate, auto_login, check_map_locked
-from scanner import scan_pokemon, scrape_special_pokemon_from_ui
+from scanner import scan_pokemon, scrape_special_pokemon_from_ui, scrape_player_status, scrape_inventory
 from combat import handle_encounter, flee
 
 log = logging.getLogger(__name__)
@@ -79,13 +79,24 @@ def run_bot(page: Page) -> None:
         # ── Remote Map Switch Check ──────────────────────────────────
         if config.BOT_STATE.get("change_map_to"):
             new_map_slug = config.BOT_STATE["change_map_to"]
-            target_url = f"{config.BASE_URL}/map/{new_map_slug}"
             
-            log.info(f"[bot] Nhận lệnh Telegram: Chuyển vùng sang {target_url}")
+            # Tra cứu URL trong maps.json, nếu không có thì fallback ghép ID
+            map_info = config.maps_data.get(new_map_slug, {})
+            rel_url = map_info.get("url") if isinstance(map_info, dict) else None
+            
+            if rel_url:
+                # Nếu URL trong json có chứa https:// thì dùng luôn, ngược lại ghép với BASE_URL
+                target_url = rel_url if rel_url.startswith("http") else f"{config.BASE_URL}{rel_url if rel_url.startswith('/') else f'/map/{rel_url}'}"
+            else:
+                # Fallback: Ghép ID map vào đuôi /map/
+                target_url = f"{config.BASE_URL}/map/{new_map_slug}"
+            
+            log.info(f"[bot] Nhận lệnh chuyển vùng: ID={new_map_slug} -> URL={target_url}")
+            
             try:
                 page.goto(target_url, wait_until="domcontentloaded")
                 page.wait_for_load_state("networkidle", timeout=20_000)
-                log.info(f"[bot] Chuyển map thành công: {new_map_slug}")
+                log.info(f"[bot] Đã điều hướng tới URL thành công.")
                 
                 # Cập nhật TARGET_MAP để đồng bộ hệ thống (dùng cho lệnh /learn và kiểm tra pet đặc biệt)
                 config.TARGET_MAP = new_map_slug
@@ -93,15 +104,14 @@ def run_bot(page: Page) -> None:
                 # Check if the map we just jumped to is actually locked
                 if check_map_locked(page):
                     log.error("[bot] Lệnh chuyển map thất bại do Map bị khóa.")
-                    # We don't exit here to allow user to try another map via Telegram
                 else:
-                    send_telegram_reply(f"✅ <b>Hạ cánh an toàn tại {new_map_slug.replace('-', ' ').title()}!</b>\nTiến hành quét khu vực mới...")
+                    send_telegram_reply(f"✅ <b>Hạ cánh an toàn tại vùng mới!</b>\n📍 ID: <code>{new_map_slug}</code>\n🔗 URL: {target_url}\nTiến hành quét khu vực mới...")
             except Exception as e:
                 log.error(f"[bot] Lỗi khi chuyển vùng: {e}")
                 send_telegram_reply(f"❌ <b>Lỗi khi chuyển vùng:</b> <code>{str(e)}</code>")
             finally:
                 config.BOT_STATE["change_map_to"] = None
-                continue # Restart loop to begin scanning new map immediately
+                continue # Restart loop
 
         # ── Auto-Recovery Check ──────────────────────────────────────
         if not auto_login(page):
@@ -121,6 +131,44 @@ def run_bot(page: Page) -> None:
                     send_telegram_reply(f"✅ <b>Đã học xong!</b>\n\n📌 <b>Hệ thống đã nhận diện các Pokémon đặc biệt tại {config.TARGET_MAP}:</b>\n<code>{learned_str}</code>")
                 else:
                     send_telegram_reply("❌ <b>Học thất bại!</b> Không tìm thấy danh sách Pokémon Đặc biệt tại đây hoặc lỗi UI.")
+
+            # ── Status Check (Triggered via Telegram) ────────────────────────
+            if config.BOT_STATE.get("trigger_status"):
+                log.info("[bot] Nhận lệnh /status. Đang thực hiện quét tình trạng...")
+                
+                # 1. Scrape map status
+                p_status = scrape_player_status(page)
+                
+                # 2. Scrape inventory (sẽ nhảy sang /items và quay lại)
+                inv = scrape_inventory(page)
+                
+                # 3. Tính toán lượt tìm kiếm còn lại để mở map
+                rem_str = ""
+                try:
+                    progress = p_status.get("map_progress", "Unknown")
+                    if "/" in progress:
+                        cur, total = progress.split("/")
+                        rem = int(total) - int(cur)
+                        if rem > 0:
+                            rem_str = f" (Còn ~{rem} lượt)"
+                except Exception:
+                    pass
+                
+                status_msg = (
+                    f"📊 <b>TÌNH TRẠNG NHÂN VẬT</b>\n"
+                    f"🗺️ Map hiện tại: <code>{p_status['current_map_name']}</code>\n"
+                    f"🎯 Tiến độ: <code>{p_status['map_progress']}</code>{rem_str}\n"
+                    f"📈 Tổng tìm kiếm: <code>{p_status['total_searches']}</code>\n\n"
+                    f"🎒 <b>KHO BÓNG</b>\n"
+                    f"🔴 Pokeball: <code>{inv['Pokeball']}</code>\n"
+                    f"🔵 Great Ball: <code>{inv['Great Ball']}</code>\n"
+                    f"🟡 Ultra Ball: <code>{inv['Ultra Ball']}</code>\n"
+                    f"🟣 Master Ball: <code>{inv['Master Ball']}</code>\n\n"
+                    f"🤖 <i>Target Status Manager</i>"
+                )
+                send_telegram_reply(status_msg)
+                config.BOT_STATE["trigger_status"] = False
+                log.info("[bot] Đã hoàn thành báo cáo status.")
 
             # ── Scan ─────────────────────────────────────────────────────────
             pokemon = scan_pokemon(page)

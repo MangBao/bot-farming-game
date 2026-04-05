@@ -60,29 +60,82 @@ def generate_auth_automated():
             
             login_btn.click()
             
-            print("⌛ [5/6] Đang chờ điều hướng vào game... (Chỉnh timeout 60s để bạn kịp giải Captcha nếu có)")
+            # ⌛ [5/6] Đợi một chút rồi ép trình duyệt vào thẳng Map (Force Goto)
+            time.sleep(5) 
             
-            # Chờ đợi trình duyệt chuyển hướng vào map (khu vực trò chơi)
-            try:
-                # Nếu trang yêu cầu Cloudflare, nó sẽ bị kẹt ở đây. 
-                # Timeout 60s đủ dài để người dùng can thiệp click tay vào box Cloudflare nếu nó hiện ra.
-                page.wait_for_url("**/map/**", timeout=60_000)
-                
-                # Check thêm sự tồn tại của nút 'Tìm kiếm' để chắc chắn đã vào game hoàn toàn
-                page.get_by_role("button", name="Tìm kiếm").wait_for(state="visible", timeout=30_000)
-                
-                print("✅ Đăng nhập thành công! Đã vào giao diện game.")
-            except Exception:
-                # Nếu timeout mà vẫn chưa vào được map
-                print("❌ Đăng nhập thất bại hoặc bị kẹt màn hình chờ (không vào được URL map).")
-                print(f"URL hiện tại: {page.url}")
-                return
+            # Tính toán URL Map để force truy cập
+            TARGET_SLUG = os.getenv("GAME_TARGET_MAP", "vung-johto").strip().lower().replace(" ", "-")
+            if not TARGET_SLUG.startswith("/map/"):
+                TARGET_SLUG = f"/map/{TARGET_SLUG}"
+            MAP_FORCE_URL = f"https://{GAME_HOST}{TARGET_SLUG}"
+            
+            print(f"🚀 Đang ép trình duyệt truy cập Map: {MAP_FORCE_URL}")
+            
+            authenticated = False
+            for attempt in range(1, 4):
+                print(f"🔄 Thử lần {attempt}/3 để xác nhận trạng thái game...")
+                try:
+                    page.goto(MAP_FORCE_URL, wait_until="domcontentloaded", timeout=40_000)
+                    
+                    # ⌛ [D] Nghỉ 5 giây đợi game render (Yêu cầu của USER)
+                    print("⌛ Đang nghỉ 5 giây đợi Javascript render toàn bộ UI...")
+                    page.wait_for_timeout(5000)
+
+                    # Kiểm tra xem có màn hình lỗi trắng hoặc nút 'Tải lại trang' không
+                    if "Đã xảy ra lỗi" in page.content() or page.get_by_role("button", name="Tải lại trang").is_visible(timeout=2000):
+                        print("⚠️ Phát hiện màn hình lỗi/loading. Đang thực thực hiện reload...")
+                        page.reload()
+                        page.wait_for_timeout(3000)
+
+                    # Kiểm tra dấu hiệu thực tế của game (Mở rộng theo yêu cầu của USER)
+                    found = False
+                    
+                    # A. Kiểm tra Text
+                    text_indicators = ["CHI TIẾT BẢN ĐỒ", "THÔNG TIN KHU VỰC", "Tìm kiếm", "Túi đồ", "Hồ sơ"]
+                    # B. Kiểm tra Link chính xác
+                    link_indicators = ["[ Sự Kiện ]", "[ Cửa Hàng ]"]
+                    
+                    for text in text_indicators:
+                        if page.get_by_text(text).first.is_visible(timeout=2000):
+                            print(f"✅ Tìm thấy dấu hiệu Text: {text}")
+                            found = True
+                            break
+                    
+                    if not found:
+                        for link in link_indicators:
+                            if page.get_by_role("link", name=link).first.is_visible(timeout=2000):
+                                print(f"✅ Tìm thấy dấu hiệu Link: {link}")
+                                found = True
+                                break
+                    
+                    if not found:
+                        # C. Kiểm tra selector links chuyển map
+                        if page.locator("a[href*='/map/']").first.is_visible(timeout=2000):
+                            print("✅ Tìm thấy dấu hiệu: Các liên kết chuyển bản đồ")
+                            found = True
+                    
+                    if found:
+                        print("✨ XÁC NHẬN: Đã vào giao diện game thành công!")
+                        authenticated = True
+                        break
+                    else:
+                        print(f"⌛ Vẫn chưa thấy giao diện game (Lần {attempt})...")
+                        # Debug: In 1000 ký tự đầu của trang để biết bot đang ở đâu
+                        page_text = page.locator("body").inner_text().strip()
+                        print(f"🔍 Nội dung trang thu gọn: {page_text[:300]}...")
+                        time.sleep(2)
+                except Exception as e:
+                    print(f"⚠️ Lỗi khi truy cập (Lần {attempt}): {e}")
+
+            if not authenticated:
+                print("❌ Đăng nhập thất bại: Không thể vào được giao diện game sau 3 lần thử.")
+                sys.exit(1)
 
             print(f"💾 [6/6] Đang lưu phiên đăng nhập vào file: {auth_path}")
             context.storage_state(path=str(auth_path))
-            
-            print(f"✨ HOÀN TẤT! File '{auth_path}' đã sẵn sàng. Bạn có thể đóng trình duyệt.")
-            time.sleep(2)
+            print(f"✨ HOÀN TẤT! File '{auth_path}' đã sẵn sàng.")
+            time.sleep(1)
+            sys.exit(0) # Thành công
 
         except Exception as e:
             print(f"❌ Có lỗi nghiêm trọng: {e}")

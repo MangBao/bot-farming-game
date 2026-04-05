@@ -44,6 +44,18 @@ def save_special_pokemon(data):
     except Exception as e:
         log.error(f"[data] Error saving special Pokémon file: {e}")
 
+def save_maps_data(data):
+    """Overwrite maps.json with new configuration."""
+    try:
+        from config import maps_json_path
+        with open(maps_json_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        log.info("[data] maps.json updated successfully.")
+        return True
+    except Exception as e:
+        log.error(f"[data] Error saving maps.json: {e}")
+        return False
+
 
 def random_sleep(min_s: float, max_s: float) -> None:
     """Sleep for a random duration in [min_s, max_s] to mimic human behaviour."""
@@ -220,15 +232,8 @@ def check_telegram_commands():
                     log.info("[remote] Bot resumed via Telegram.")
                     send_telegram_reply("▶️ <b>Bot tiếp tục đi săn!</b>")
                 elif text == "/status":
-                    status_text = (
-                        f"📊 <b>BÁO CÁO TÌNH HÌNH:</b>\n\n"
-                        f"• <b>Trạng thái:</b> {'⏸️ Đang nghỉ' if config.BOT_STATE.get('is_paused') else '▶️ Đang săn'}\n"
-                        f"• <b>Đã gặp:</b> {config.BOT_STATE['stats']['encounters']} con\n"
-                        f"• <b>Đã bắt:</b> {config.BOT_STATE['stats']['caught']} con\n"
-                        f"• <b>HP Sếp:</b> <code>{config.BOT_STATE['player_hp']}</code>\n\n"
-                        f"🤖 <i>Target Remote Manager</i>"
-                    )
-                    send_telegram_reply(status_text)
+                    config.BOT_STATE["trigger_status"] = True
+                    log.info("[remote] Nhận lệnh /status từ Telegram.")
                 elif text == "/mapinfo":
                     event_maps = []
                     regular_maps = []
@@ -261,6 +266,30 @@ def check_telegram_commands():
                     
                     message += "👉 <i>Dùng lệnh: /map [tên-map] để chuyển vùng!</i>"
                     send_telegram_reply(message)
+                elif text.startswith("/setmapurl"):
+                    # Cú pháp: /setmapurl [id] [url]
+                    parts = text.split()
+                    if len(parts) >= 3:
+                        map_id = parts[1]
+                        map_url = parts[2]
+                        
+                        # Khởi tạo map nếu chưa có trong dict
+                        if map_id not in config.maps_data:
+                            config.maps_data[map_id] = {"name": map_id.replace("-", " ").title()}
+                            
+                        # Nếu map_info là dict thì gán url, nếu là string (legacy) thì convert sang dict
+                        if not isinstance(config.maps_data[map_id], dict):
+                            config.maps_data[map_id] = {"name": config.maps_data[map_id], "url": map_url}
+                        else:
+                            config.maps_data[map_id]["url"] = map_url
+                        
+                        if save_maps_data(config.maps_data):
+                            send_telegram_reply(f"✅ <b>Đã cập nhật URL!</b>\n📍 Map ID: <code>{map_id}</code>\n🔗 Web: {map_url}")
+                        else:
+                            send_telegram_reply("❌ <b>Lỗi:</b> Không thể ghi file maps.json.")
+                    else:
+                        send_telegram_reply("⚠️ <b>Sai cú pháp!</b> Vui lòng nhập: <code>/setmapurl [id] [url]</code>")
+
                 elif text.startswith("/map"):
                     parts = text.split(maxsplit=1)
                     if len(parts) >= 2:

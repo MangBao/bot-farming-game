@@ -1,12 +1,14 @@
 {
-    "event-2-djoc-la": [
-        "MEGAAMPHAROS",
-        "MEGA HERACROSS",
-        "MEGA SKARMORY"
-    ],
-    "event-cham-chi-2": [
-        "VICTINI",
-        "DEINO",
-        "COBALION"
-    ]
+    "maps": {
+        "event-2-djoc-la": [
+            "MEGAAMPHAROS",
+            "MEGA HERACROSS",
+            "MEGA SKARMORY"
+        ],
+        "event-cham-chi-2": [
+            "AWAKENEDMEWTWO",
+            "ARCEUS",
+            "MEGA ZERAORA"
+        ]
+    }
 }
